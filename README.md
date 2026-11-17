@@ -16,7 +16,7 @@
 
 <p align="center">
   <a href="https://github.com/Mark-stimulate/afterword/actions/workflows/check.yml"><img src="https://github.com/Mark-stimulate/afterword/actions/workflows/check.yml/badge.svg" alt="自动测试与构建状态"></a>
-  &nbsp; MIT 开源 · 测试版 0.3.0 · 自带 DeepSeek API Key
+  &nbsp; MIT 开源 · 测试版 0.3.1 · 自带 DeepSeek API Key
 </p>
 
 ---
@@ -62,20 +62,22 @@ API 由 DeepSeek 单独计费。Key 仅存于当前页面内存，刷新后需�
 
 → [隐私边界、备份与换设备说明](docs/privacy.md)
 
-## 选择适合你的版本
+## 一套源码，两种使用方式
 
-| | 标准构建 | 社区构建 |
+自行部署和运营者提供的站点使用同一套源码、同一套功能，通过不同的验签配置接受各自的 license。
+
+| | 自行部署 | 运营者提供的站点 |
 | --- | --- | --- |
-| 聊天、图片、语音、联网、导入、阅读设置、手动记忆、基础导出与加密备份 | 免费 | 免费 |
-| 全文与记忆搜索、保存与套用记忆模板 | 高级授权功能 | 免费开放 |
-| 已保存模板的查看、复制、删除与备份 | 无授权仍可使用 | 可使用 |
-| 适合谁 | 希望使用维护好的成品的人 | 愿意自行构建、部署或修改的人 |
+| 聊天、图片、语音、联网、导入、阅读设置、手动记忆与基础数据保护 | 免费 | 免费 |
+| 全文与记忆搜索、保存与套用记忆模板 | 导入仓库提供的免费 license 解锁 | 使用该站点运营者提供的 license 解锁 |
+| 已保存模板的查看、复制、删除与备份 | 无授权仍可使用 | 无授权仍可使用 |
+| 授权来源 | [社区免费授权.license](examples/社区免费授权.license) | 由站点运营者提供 |
 
-当前只有**公开测试授权**，尚未接入正式购买或支付。完整源码采用 [MIT 许可证](LICENSE)。社区构建无高级功能门槛；两种版本使用相同的数据保护原则。
+社区免费授权无到期日，适用于 0.x 版本；它不适用于运营者提供的站点。完整源码采用 [MIT 许可证](LICENSE)，两种使用方式采用相同的数据保护原则。当前应用没有内置购买或支付。
 
 ## 自己运行，也很简单
 
-自行使用推荐**免费社区版**，所有功能无需高级授权；DeepSeek API 费用仍由自己的账户承担。
+自行部署可以免费使用全部功能：基础功能直接使用，高级功能导入仓库提供的免费 license 后解锁。DeepSeek API 费用仍由自己的账户承担。
 
 需要 Node.js 22 或更新版本，无第三方运行依赖。下载源码后，在仓库根目录运行：
 
@@ -87,9 +89,11 @@ npm start
 
 打开 `http://127.0.0.1:4173`。请勿直接双击 HTML 文件。
 
+在「设置与管理 → 高级功能 · 授权」下载并导入 **社区免费授权.license**，即可解锁高级功能。
+
 部署到 **Cloudflare Pages**：构建命令填 `npm test && npm run build:community`，输出目录填 `dist`。
 
-→ [社区版部署指南](docs/deployment.md) · [源码结构与测试](docs/development.md)
+→ [自行部署指南](docs/deployment.md) · [源码结构与测试](docs/development.md)
 
 ## 现在的边界，也想提前告诉你
 

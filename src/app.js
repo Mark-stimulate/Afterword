@@ -2,20 +2,20 @@ import {createMediaUI} from './media-ui.mjs';
 import {chatRequest,applyChunk,previewMessages} from './media.mjs';
 import {readDeepSeekZip} from './zip-import.mjs';
 import {newChat,importText,contextFor,readSSE,encryptBackup,decryptBackup} from './core.mjs';
-import {verifyLicense} from './license.mjs';
-import {EDITION,PUBLIC_KEY} from './build-config.mjs';
+import {verifyLicense,licenseActive} from './license.mjs';
+import {LICENSE_CHANNEL,PUBLIC_KEY} from './build-config.mjs';
 import {palettes,fonts,defaultAppearance,cleanAppearance,themeVars} from './appearance.mjs';
 const $=s=>document.querySelector(s), el=(tag,txt,cls)=>{const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;};
 let db,chats=[],current=null,key='',busy=false,controller=null,toastTimer;
 let mediaUI;
 let licenseInfo=null,appearance={...defaultAppearance},fullSearch=false;
-function isPro(){return EDITION==='community'||!!(licenseInfo&&Date.now()>=Date.parse(licenseInfo.notBefore)&&Date.now()<Date.parse(licenseInfo.expires));}
+function isPro(){return licenseActive(licenseInfo);}
 function loadLocal(name,fallback){try{return JSON.parse(localStorage.getItem('xuye-'+name))??fallback;}catch{return fallback;}}
 function storeLocal(name,value){try{localStorage.setItem('xuye-'+name,JSON.stringify(value));}catch{throw Error('浏览器无法保存设置，请检查本地空间或权限');}}
 function applyAppearance(value){appearance=cleanAppearance(value);for(const [name,v]of Object.entries(themeVars(appearance)))document.documentElement.style.setProperty(name,v);document.documentElement.dataset.night=String(appearance.night);}
 applyAppearance(loadLocal('appearance',defaultAppearance));
-async function loadLicense(){const saved=loadLocal('license',null);if(saved)try{licenseInfo=await verifyLicense(saved,PUBLIC_KEY);}catch{licenseInfo=null;}updatePlan();}
-function updatePlan(){const b=$('#licenseBtn');if(b)b.textContent=EDITION==='community'?'✧ 社区完整版':isPro()?(licenseInfo.kind==='test'?'✧ 高级版 · 测试授权':'✧ 高级版'):'✧ 免费版 · 高级功能';const toggle=$('#fullSearch');if(toggle){toggle.checked=fullSearch&&isPro();} }
+async function loadLicense(){const saved=loadLocal('license',null);if(saved)try{licenseInfo=await verifyLicense(saved,PUBLIC_KEY,{channel:LICENSE_CHANNEL});}catch{licenseInfo=null;}updatePlan();}
+function updatePlan(){const b=$('#licenseBtn');if(b)b.textContent=isPro()?(licenseInfo.kind==='community'?'✧ 已解锁 · 社区免费授权':'✧ 已解锁 · 站点授权'):'✧ 免费基础版 · 高级功能';const toggle=$('#fullSearch');if(toggle)toggle.checked=fullSearch&&isPro();}
 const chat=()=>chats.find(c=>c.id===current);
 function toast(t){($('#dialog').open?$('#dialog'):document.body).append($('#toast'));$('#toast').textContent=t;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
 async function initDB(){db=await new Promise((resolve,reject)=>{const r=indexedDB.open('xuye-local-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const data=await new Promise((resolve,reject)=>{const r=db.transaction('state').objectStore('state').get('chats');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});chats=Array.isArray(data)?data:[];current=chats[0]?.id||null;render();}
@@ -45,7 +45,7 @@ function render(){
 async function makeChat(){mediaUI?.resetDraft();const c=newChat();chats.unshift(c);current=c.id;await save();render();$('#prompt').focus();}
 function preview(){mediaUI.assertReady();const c=chat()||newChat(),options=mediaUI.options(),b=modal('本次会发送什么');note(b,'以下消息将从浏览器直接发送至 DeepSeek。图片数据在此用占位说明代替；实际请求包含图片。','notice');note(b,options.webEnabled?'联网已开启：模型可搜索、读取网页，可能额外计费。':'联网关闭：本次不启用搜索或读取网页工具。');const msgs=contextFor(c,$('#prompt').value.trim(),options);b.append(el('pre',JSON.stringify(previewMessages(msgs),null,2)));note(b,'这不是全部历史。官方 ZIP 中的附件与其他分支不会自动导入。');}
 
-function managePanel(){const b=modal('设置与管理');note(b,'连接、外观和数据管理都在这里。');const menu=el('div',undefined,'manage-menu');b.append(menu);button(menu,'⚙ 连接与 API 设置',settings);button(menu,'◐ 颜色与阅读',appearancePanel);button(menu,'♩ 图片、语音与联网',()=>mediaUI.settings());button(menu,'◌ 用量与余额',usagePanel);button(menu,'▣ 备份与恢复',backup);button(menu,'✧ 免费版与高级功能',licensePanel);button(menu,'ⓘ 使用指南与数据说明',guide);}
+function managePanel(){const b=modal('设置与管理');note(b,'连接、外观和数据管理都在这里。');const menu=el('div',undefined,'manage-menu');b.append(menu);button(menu,'⚙ 连接与 API 设置',settings);button(menu,'◐ 颜色与阅读',appearancePanel);button(menu,'♩ 图片、语音与联网',()=>mediaUI.settings());button(menu,'◌ 用量与余额',usagePanel);button(menu,'▣ 备份与恢复',backup);button(menu,'✧ 高级功能 · 授权',licensePanel);button(menu,'ⓘ 使用指南与数据说明',guide);}
 function usagePanel(){
  const b=modal('用量与余额');note(b,'只有打开本页才显示用量；余额仅在你点击查询后，通过浏览器直连 DeepSeek 官方 API。','notice');
  let input=0,output=0,count=0;for(const c of chats)for(const m of c.messages||[]){const u=m.usage;if(u&&Number.isFinite(u.prompt_tokens)&&Number.isFinite(u.completion_tokens)&&u.prompt_tokens>=0&&u.completion_tokens>=0){input+=u.prompt_tokens;output+=u.completion_tokens;count++;}}
@@ -114,18 +114,19 @@ function appearancePanel(){
  const row=el('div',undefined,'row');b.append(row);button(row,'保存这份心情',()=>{storeLocal('appearance',draft);committed=true;applyAppearance(draft);close();toast('颜色与阅读设置已保存在本设备');},'primary');button(row,'取消预览',close);button(row,'恢复默认',()=>{draft={...defaultAppearance};custom.value=draft.color;night.checked=draft.night;const selects=controls.querySelectorAll('select');selects[0].value=draft.font;selects[1].value=draft.size;selects[2].value=draft.spacing;refresh();});refresh();
 }
 function licensePanel(){const b=modal('高级功能 · 本地授权');
- const status=EDITION==='community'?'社区完整版 · 无需授权':isPro()?`高级版已解锁 · ${licenseInfo.kind==='test'?'测试授权，不可作为付费凭证':'正式授权'}`:'当前为免费版';
- note(b,status,'notice');note(b,'免费：基础聊天、导入、手动记忆、所有颜色和字体、查看与删除记录、加密备份与恢复。');
- note(b,'本版可解锁：跨对话正文与记忆搜索、当前对话的多份记忆模板保存和切换。模板内容在授权失效后仍可查看、复制和备份。');
- if(EDITION==='community'){note(b,'这是自行构建的完整功能版本，无需购买授权。');return;}
- if(isPro())note(b,`授权编号：${licenseInfo.id}。适用：0.x 版本。有效期至 ${new Date(licenseInfo.expires).toLocaleDateString('zh-CN')}。离线验证，不上传设备或聊天数据。`);
- const text=field(b,'粘贴授权内容（JSON）','textarea');text.placeholder='粘贴 .license 文件中的完整内容';text.maxLength=20000;
+ const community=LICENSE_CHANNEL==='community';
+ note(b,isPro()?(community?'已解锁 · 社区免费授权':'已解锁 · 站点授权'):'当前为免费基础版','notice');
+ note(b,'全文与记忆搜索、保存与套用记忆模板需要有效授权。聊天、图片、语音、联网、阅读设置，以及查看、复制、删除、导出和加密备份始终免费。API 费用由服务方单独收取。');
+ if(community){note(b,'这是自行部署版本。下载公开的社区免费授权文件，再在下方导入即可解锁；无需购买。该授权不适用于运营者提供的站点。');const a=el('a','下载社区免费授权');a.href='community.license';a.download='社区免费授权.license';b.append(a);}
+ else note(b,'此站点只接受运营者签发的授权，不能使用公开的社区免费授权。请向站点运营者获取 license；本应用没有内置支付入口。');
+ if(isPro())note(b,`授权编号：${licenseInfo.id}。适用：0.x 版本。${licenseInfo.expires===null?'无到期日':`有效期至 ${new Date(licenseInfo.expires).toLocaleDateString('zh-CN')}`}。离线验证，不上传设备或聊天数据。`);
+ const text=field(b,'粘贴授权文件内容（JSON）','textarea');text.placeholder='粘贴 .license 文件中的完整内容';text.maxLength=20000;
  const file=field(b,'或选择 .license 授权文件','file');file.accept='.license,.json';file.onchange=async()=>{try{const f=file.files[0];if(!f)return;if(f.size>20000)throw Error('授权文件过大');text.value=await f.text();}catch(e){toast(e.message);}};
- const row=el('div',undefined,'row');b.append(row);button(row,'验证并解锁',async()=>{let envelope;try{envelope=JSON.parse(text.value);}catch{throw Error('请粘贴完整的授权 JSON 或选择授权文件');}const verified=await verifyLicense(envelope,PUBLIC_KEY);storeLocal('license',envelope);licenseInfo=verified;text.value='';close();render();toast('高级功能已解锁，无需上传聊天数据');},'primary');
- button(row,'移除本机授权',()=>{localStorage.removeItem('xuye-license');licenseInfo=null;fullSearch=false;close();render();toast('已切回免费版，记录和已保存模板保留');});
- note(b,'当前没有接入购买或支付。可使用源码 examples 目录中的「测试高级授权.license」测试解锁，该公开测试授权仅用于体验。');
- const details=el('details'),summary=el('summary','我想免费自行构建完整版');details.append(summary,el('p','完整源码随交付包提供。在 GitHub 源码根目录运行 npm run community，再进入 community 目录运行 npm start。所有高级功能无需授权。仓库：github.com/Mark-stimulate/afterword。'));b.append(details);
+ const row=el('div',undefined,'row');b.append(row);button(row,'验证并解锁',async()=>{let envelope;try{envelope=JSON.parse(text.value);}catch{throw Error('请粘贴完整的授权 JSON 或选择授权文件');}const verified=await verifyLicense(envelope,PUBLIC_KEY,{channel:LICENSE_CHANNEL});storeLocal('license',envelope);licenseInfo=verified;text.value='';close();render();toast('高级功能已解锁，无需上传聊天数据');},'primary');
+ button(row,'移除本机授权',()=>{localStorage.removeItem('xuye-license');licenseInfo=null;fullSearch=false;close();render();toast('已切回免费基础版，记录和已保存模板保留');});
+ note(b,'更新或切换站点后，会按当前站点的验签配置重新校验已保存的授权。授权不匹配时，仅关闭高级操作，已有聊天和模板仍保留。');
 }
+
 async function libraryPanel(){if(busy)return toast('请先停止当前生成');if(!chat())await makeChat();const c=chat(),b=modal('记忆模板 · '+c.title);note(b,'为同一段对话保留不同的人物设定或故事阶段。套用时替换当前记忆卡；原有模板仍会保留。');
  const cards=c.memoryCards||[];
  if(!cards.length)note(b,'还没有模板。可以先在「记忆卡」里写好设定，再保存成模板。','notice');

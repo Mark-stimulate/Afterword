@@ -16,4 +16,4 @@ jobs:
           git grep -n 'After[W]ord' || brand_status=$?
           test "$brand_status" -eq 1
       - run: npm test
-      - run: npm run build
+      - run: npm run build:community
