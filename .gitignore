@@ -15,3 +15,5 @@ dist/
 *-plaintext.json
 .DS_Store
 Thumbs.db
+.openai/
+src/qa-temporary/

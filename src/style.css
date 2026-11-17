@@ -23,3 +23,15 @@ h1 em{color:var(--green)}#composer{border-color:var(--line);box-shadow:0 8px 30p
 @media(prefers-reduced-motion:reduce){.conversation-title.scrolling{animation:none;max-width:100%;overflow:hidden;text-overflow:ellipsis}}
 
 .test-result{padding:12px 14px;background:var(--sage);border:1px solid var(--line);border-radius:9px;line-height:1.7;overflow-wrap:anywhere}
+
+/* v0.3: quiet, theme-aware media controls */
+.composer-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 0 9px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.composer-tools button{font-size:12px;padding:7px 11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;min-height:36px}
+.composer-tools button:hover,.composer-tools button[aria-pressed=true]{background:var(--sage);color:var(--green);border-color:var(--green)}
+.attachment-tray{display:flex;gap:10px;overflow-x:auto;padding:3px 0 10px}.attachment-card{position:relative;flex:0 0 88px;min-width:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--sage)}
+.attachment-card img{display:block;width:88px;height:66px;object-fit:cover}.attachment-card span{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:5px;font-size:10px}.attachment-card button{position:absolute;right:3px;top:3px;border:1px solid var(--line);background:var(--paper);padding:3px 7px;min-width:28px;min-height:28px}
+.message-images{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.message-images button{padding:0;border:1px solid var(--line);background:var(--sage);overflow:hidden;max-width:46%;border-radius:12px}.message-images img{display:block;max-width:100%;width:180px;height:140px;object-fit:contain}.image-viewer{display:block;max-width:100%;max-height:60dvh;object-fit:contain;margin:auto;border-radius:12px}
+.source-list{margin:14px 6px 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}.source-list a{display:block;margin-top:8px;overflow-wrap:anywhere;text-decoration:none}.source-list a:hover{text-decoration:underline}.citation{font-size:.7em;vertical-align:super;text-decoration:none;padding:0 3px;color:var(--green)}
+#dialogBody audio{display:block;width:100%;margin:14px 0;border-radius:12px}html[data-night=true] audio{color-scheme:dark}
+.message .who{min-height:27px}.message .copy{min-height:30px;letter-spacing:0}
+@media(max-width:650px){.composer-tools button{min-height:40px}.attachment-card button{min-width:32px;min-height:32px}.message .copy{min-height:36px}#contextLine{font-size:9px}.composerbottom{gap:4px}.composerbottom>div{gap:4px}}

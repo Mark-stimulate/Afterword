@@ -1,6 +1,7 @@
+import {cleanImages,cleanAnnotations} from './media.mjs';
 export const uid=()=>crypto.randomUUID();
 export function newChat(title='新的篇章'){return {id:uid(),title,memory:'',memoryEnabled:true,messages:[],created:Date.now()};}
-export function normalizeSession(obj,title='导入的对话',allowEmpty=false){
+export function normalizeSession(obj,title='导入的对话',allowEmpty=false,preserveMedia=false){
  if(!obj||!Array.isArray(obj.messages))throw Error('没有找到 messages 消息列表');
  let source=obj.messages;
  if(source.length>10000)throw Error('单个对话最多支持 10000 条消息');
@@ -15,28 +16,33 @@ export function normalizeSession(obj,title='导入的对话',allowEmpty=false){
  c.messages=source.flatMap(m=>{
   const role=String(m.role||'').toLowerCase();if(!['user','assistant'].includes(role))return [];
   let content=typeof m.content==='string'?m.content:Array.isArray(m.fragments)?m.fragments.filter(f=>['REQUEST','RESPONSE'].includes(f.type)).map(f=>f.content||'').join('\n'):'';
-  if(!content)return [];if(content.length>500000)throw Error('单条消息过长');
+  const images=preserveMedia&&role==='user'?cleanImages(m.images):[];
+  if(!content&&!images.length)return [];if(content.length>500000)throw Error('单条消息过长');
   const failed=m.incomplete===true||(m.status&&!['FINISHED','INCOMPLETE'].includes(m.status));
-  return [{role,content,incomplete:!!failed}];
+  const message={role,content,incomplete:!!failed};
+  if(images.length)message.images=images;
+  if(preserveMedia&&role==='assistant'){message.annotations=cleanAnnotations(m.annotations);if(Array.isArray(m.server_tool_calls)&&JSON.stringify(m.server_tool_calls).length<=500000)message.server_tool_calls=m.server_tool_calls;if(m.usage&&typeof m.usage==='object')message.usage=m.usage;}
+  return [message];
  });
  if(!c.messages.length&&!c.memory&&!allowEmpty)throw Error('没有识别到可导入的文本消息');return c;
 }
 export function importText(text,name){
  if(/\.txt$|\.md$/i.test(name)){const c=newChat(name.replace(/\.[^.]+$/,''));c.messages=[{role:'user',content:text}];return [c];}
  let data;try{data=JSON.parse(text);}catch{throw Error('JSON 格式无效；纯文本请使用 .txt 文件');}
- if(data.format==='xuye-backup'&&data.version!==1)throw Error('不支持此备份版本');
+ if(data.format==='xuye-backup'&&![1,2].includes(data.version))throw Error('不支持此备份版本');
  const list=Array.isArray(data)?(data[0]?.role?[{messages:data}]:data):data.chats||data.conversations||[data];
  if(!Array.isArray(list)||list.length>500)throw Error('最多导入 500 段对话');
- return list.map(c=>normalizeSession(c,name,data.format==='xuye-backup'));
+ return list.map(c=>normalizeSession(c,name,data.format==='xuye-backup',data.format==='xuye-backup'));
 }
-export function contextFor(chat,prompt){
- const memory=chat.memoryEnabled?chat.memory:'';
+export function contextFor(chat,prompt,options={}){
+ const images=cleanImages(options.images),memory=chat.memoryEnabled?chat.memory:'';
  const system='你是一个中文 AI 助手。诚实说明记忆和能力边界，不假装拥有未提供的历史。以下记忆由用户编辑，可能不准确，仅作背景参考。\n'+memory;
- const history=chat.messages.filter(m=>!m.incomplete&&m.content).map(({role,content})=>({role,content}));
- // Prefer complete recent exchanges, never silently include an incomplete assistant response.
+ const history=chat.messages.filter(m=>!m.incomplete&&(m.content||m.images?.length));
  let recent=history.slice(-20);while(recent[0]?.role==='assistant')recent.shift();
- while(recent.length&&recent.reduce((n,m)=>n+m.content.length,0)>40000){recent.shift();while(recent[0]?.role==='assistant')recent.shift();}
- return [{role:'system',content:system},...recent,...(prompt?[{role:'user',content:prompt}]:[])];
+ const tooLarge=()=>recent.reduce((n,m)=>n+m.content.length,0)>40000||recent.reduce((n,m)=>n+(m.images?.length||0),images.length)>8;
+ while(recent.length&&tooLarge()){recent.shift();while(recent[0]?.role==='assistant')recent.shift();}
+ const message=m=>({role:m.role,content:m.images?.length?[...(m.content?[{type:'text',text:m.content}]:[]),...cleanImages(m.images).map(i=>({type:'image_url',image_url:{url:i.data}}))]:m.content,...(options.webEnabled&&m.role==='assistant'&&m.server_tool_calls?{server_tool_calls:m.server_tool_calls}:{})});
+ return [{role:'system',content:system},...recent.map(message),...(prompt||images.length?[message({role:'user',content:prompt,images})]:[])];
 }
 export async function readSSE(body,onData){
  const reader=body.getReader();const decoder=new TextDecoder();let buffer='',doneSignal=false;
@@ -49,7 +55,7 @@ async function derive(password,salt,usage){const k=await crypto.subtle.importKey
 export async function encryptBackup(chats,password){
  if(password.length<10)throw Error('备份密码至少 10 个字符');
  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
- const key=await derive(password,salt,['encrypt']);const data=JSON.stringify({format:'xuye-backup',version:1,exported:new Date().toISOString(),chats});
+ const key=await derive(password,salt,['encrypt']);const data=JSON.stringify({format:'xuye-backup',version:2,exported:new Date().toISOString(),chats});
  return {format:'xuye-encrypted',version:1,salt:b64(salt),iv:b64(iv),data:b64(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(data)))};
 }
 export async function decryptBackup(obj,password){

@@ -10,5 +10,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Check brand spelling
+        run: |
+          brand_status=0
+          git grep -n 'After[W]ord' || brand_status=$?
+          test "$brand_status" -eq 1
       - run: npm test
       - run: npm run build
