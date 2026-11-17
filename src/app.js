@@ -110,7 +110,7 @@ function licensePanel(){const b=modal('高级功能 · 本地授权');
  const file=field(b,'或选择 .license 授权文件','file');file.accept='.license,.json';file.onchange=async()=>{try{const f=file.files[0];if(!f)return;if(f.size>20000)throw Error('授权文件过大');text.value=await f.text();}catch(e){toast(e.message);}};
  const row=el('div',undefined,'row');b.append(row);button(row,'验证并解锁',async()=>{let envelope;try{envelope=JSON.parse(text.value);}catch{throw Error('请粘贴完整的授权 JSON 或选择授权文件');}const verified=await verifyLicense(envelope,PUBLIC_KEY);storeLocal('license',envelope);licenseInfo=verified;text.value='';close();render();toast('高级功能已解锁，无需上传聊天数据');},'primary');
  button(row,'移除本机授权',()=>{localStorage.removeItem('xuye-license');licenseInfo=null;fullSearch=false;close();render();toast('已切回免费版，记录和已保存模板保留');});
- note(b,'当前没有接入购买或支付。可使用源码包中的「测试高级授权.license」测试解锁，该公开测试授权仅用于体验。');
+ note(b,'当前没有接入购买或支付。可使用源码 examples 目录中的「测试高级授权.license」测试解锁，该公开测试授权仅用于体验。');
  const details=el('details'),summary=el('summary','我想免费自行构建完整版');details.append(summary,el('p','完整源码随交付包提供。运行 node build-community.mjs，再进入 community 目录运行 node server.mjs。所有高级功能无需授权。GitHub 仓库尚未发布。'));b.append(details);
 }
 async function libraryPanel(){if(busy)return toast('请先停止当前生成');if(!chat())await makeChat();const c=chat(),b=modal('记忆模板 · '+c.title);note(b,'为同一段对话保留不同的人物设定或故事阶段。套用时替换当前记忆卡；原有模板仍会保留。');

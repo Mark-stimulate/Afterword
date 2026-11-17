@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+<title id="title">拾语 · Afterword</title><desc id="desc">留一页，给未完的话。浅紫、奶油白与淡金色的书页主题品牌封面。</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#f7f1fb"/><stop offset=".55" stop-color="#faf8f3"/><stop offset="1" stop-color="#e8edf7"/></linearGradient><linearGradient id="paper" x2="1" y2="1"><stop stop-color="#fffdf8"/><stop offset="1" stop-color="#e9e0f0"/></linearGradient></defs>
+<rect width="1200" height="360" rx="24" fill="url(#bg)"/>
+<rect x="22" y="22" width="1156" height="316" rx="14" fill="none" stroke="#d9cfdf"/>
+<path d="M800 300 Q920 215 1160 270" fill="none" stroke="#c2adc9" stroke-width="1.2"/>
+<path d="M840 310 Q990 200 1150 250" fill="none" stroke="#cab68e" stroke-width="1.2"/>
+<g transform="translate(885 85) rotate(8 85 100)"><rect x="15" y="10" width="150" height="190" rx="9" fill="#d9cede"/><rect width="150" height="190" rx="9" fill="url(#paper)" stroke="#bca9c9"/><path d="M28 48 H120 M28 72 H110 M28 96 H120 M28 120 H90" stroke="#bca9c9" stroke-width="2"/><path d="M105 0 V54 L119 43 L133 54 V0" fill="#9b789e"/><circle cx="44" cy="151" r="5" fill="#bea574"/></g>
+<text x="80" y="91" fill="#796987" font-family="Georgia,serif" font-size="16" letter-spacing="5">A PLACE FOR YOUR UNFINISHED WORDS</text>
+<text x="76" y="179" fill="#41334e" font-family="Georgia,'Noto Serif CJK SC',serif" font-size="60">拾语 <tspan fill="#9a7b9f">·</tspan> Afterword</text>
+<text x="81" y="239" fill="#6c5b73" font-family="'Noto Sans CJK SC',sans-serif" font-size="24" letter-spacing="3">留一页，给未完的话。</text>
+<text x="82" y="293" fill="#796987" font-family="'Noto Sans CJK SC',sans-serif" font-size="15">旧对话 · 故事与记忆 · 由你保管</text>
+</svg>

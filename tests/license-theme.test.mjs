@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
-import {PUBLIC_KEY} from '../build-config.mjs';import {verifyLicense} from '../license.mjs';import {palettes,themeVars,contrast,cleanAppearance} from '../appearance.mjs';import {importText} from '../core.mjs';
-const sample=JSON.parse(await readFile(new URL('../测试高级授权.license',import.meta.url),'utf8'));
+import {PUBLIC_KEY} from '../src/build-config.mjs';import {verifyLicense} from '../src/license.mjs';import {palettes,themeVars,contrast,cleanAppearance} from '../src/appearance.mjs';import {importText} from '../src/core.mjs';
+const sample=JSON.parse(await readFile(new URL('../examples/测试高级授权.license',import.meta.url),'utf8'));
 const now=Date.parse('2026-11-17T12:00:00Z');
 test('signed test license validates offline',async()=>{const p=await verifyLicense(sample,PUBLIC_KEY,now);assert.equal(p.kind,'test');assert.equal(p.tier,'pro');});
 test('tampered payload or signature rejected',async()=>{await assert.rejects(verifyLicense({...sample,payload:sample.payload.replace('0001','9999')},PUBLIC_KEY,now));await assert.rejects(verifyLicense({...sample,signature:'AAAA'},PUBLIC_KEY,now));});

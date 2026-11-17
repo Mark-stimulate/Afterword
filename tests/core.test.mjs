@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {newChat,normalizeSession,importText,contextFor,encryptBackup,decryptBackup,readSSE} from '../core.mjs';
+import {newChat,normalizeSession,importText,contextFor,encryptBackup,decryptBackup,readSSE} from '../src/core.mjs';
 test('official active branch only; no reasoning or attachments',()=>{const c=normalizeSession({current_message_id:3,messages:[{id:1,parent_id:null,role:'USER',fragments:[{type:'REQUEST',content:'hello'}]},{id:2,parent_id:1,role:'ASSISTANT',fragments:[{type:'RESPONSE',content:'old branch'}]},{id:3,parent_id:1,role:'ASSISTANT',fragments:[{type:'THINK',content:'private reasoning'},{type:'RESPONSE',content:'chosen'}]}]});assert.deepEqual(c.messages.map(m=>m.content),['hello','chosen']);});
 test('invalid branch rejected',()=>assert.throws(()=>normalizeSession({current_message_id:2,messages:[{id:2,parent_id:2,role:'USER',fragments:[]}]}),/损坏/));
 test('generic, text and invalid imports',()=>{assert.equal(importText('[{"role":"user","content":"你好"}]','x.json')[0].messages[0].content,'你好');assert.equal(importText('hello','a.txt')[0].title,'a');assert.throws(()=>importText('{}','a.json'));});
