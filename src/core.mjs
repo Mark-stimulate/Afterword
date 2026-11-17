@@ -27,7 +27,20 @@ export function normalizeSession(obj,title='导入的对话',allowEmpty=false,pr
   if(preserveMedia&&role==='assistant'){if(typeof m.reasoning_content==='string'&&m.reasoning_content.length<=500000)message.reasoning_content=m.reasoning_content;message.annotations=cleanAnnotations(m.annotations);if(Array.isArray(m.server_tool_calls)&&JSON.stringify(m.server_tool_calls).length<=500000)message.server_tool_calls=m.server_tool_calls;if(m.usage&&typeof m.usage==='object')message.usage=m.usage;}
   return [message];
  });
+ if(preserveMedia&&Array.isArray(obj.revisions))c.revisions=obj.revisions.map(v=>{
+  if(!v||!Array.isArray(v.messages))throw Error('历史版本格式无效');
+  const branch=normalizeSession({messages:v.messages},c.title,true,true);
+  return {id:uid(),created:Number.isSafeInteger(v.created)&&v.created>0?v.created:Date.now(),messages:branch.messages};
+ });
  if(!c.messages.length&&!c.memory&&!allowEmpty)throw Error('没有识别到可导入的文本消息');return c;
+}
+export function editedBranch(chat,index,message){
+ if(!Number.isInteger(index)||index<0||chat.messages[index]?.role!=='user')throw Error('只能编辑自己的消息');
+ if(message?.role!=='user'||typeof message.content!=='string'||message.content.length>50000)throw Error('编辑内容无效或超过 5 万字符');
+ const images=cleanImages(message.images),documents=cleanDocuments(message.documents);
+ if(!message.content.trim()&&!images.length&&!documents.length)throw Error('请填写消息或添加附件');
+ const edited={role:'user',content:message.content,...(images.length?{images}:{}),...(documents.length?{documents}:{})};
+ return {messages:[...chat.messages.slice(0,index),edited],revisions:[...(chat.revisions||[]),{id:uid(),created:Date.now(),messages:chat.messages}]};
 }
 export function importText(text,name){
  if(/\.txt$|\.md$/i.test(name)){const c=newChat(name.replace(/\.[^.]+$/,''));c.messages=[{role:'user',content:text}];return [c];}

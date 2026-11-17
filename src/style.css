@@ -40,12 +40,12 @@ h1 em{color:var(--green)}#composer{border-color:var(--line);box-shadow:0 8px 30p
 @media(max-width:650px){
  footer{padding-top:8px;padding-bottom:10px}
  footer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) #contextLine,
- #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composer-tools,
- #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composerbottom,
- #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) .attachment-tray{display:none}
+ #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composer-tools,
+ #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composerbottom,
+ #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .attachment-tray{display:none}
  #composer{padding:6px 10px}
  #composer #prompt{height:90px;min-height:90px;resize:none}
- #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) #prompt{height:44px;min-height:44px;overflow:hidden;white-space:nowrap}
+ #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) #prompt{height:44px;min-height:44px;overflow:hidden;white-space:nowrap}
 }
 .speech-status{display:block;clear:both;font-size:11px;letter-spacing:0;color:var(--muted);padding-top:6px;overflow-wrap:anywhere}
 
@@ -82,4 +82,18 @@ nav .conversation-more{flex:0 0 36px;width:36px;min-height:40px;margin:0;padding
 .document-card button{position:absolute;right:4px;top:4px;min-width:32px;min-height:32px;padding:5px}
 .message-documents button{border:1px solid var(--line);background:var(--sage);max-width:100%;text-align:left;overflow-wrap:anywhere;font-size:13px}
 .document-list{border:1px solid var(--line);border-radius:12px;padding:0 14px;margin:16px 0}
-@media(max-width:650px){#composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) .document-tray{display:none}}
+@media(max-width:650px){#composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .document-tray{display:none}}
+
+/* Keep message actions with their content and align the sidebar dots optically. */
+nav .conversation-more{display:flex;align-items:center;justify-content:center;padding:0}
+.conversation-more svg{display:block;flex:none}
+.message-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin:12px 0 0;color:var(--muted)}
+.message-actions button{font-size:12px;min-height:34px;padding:6px 10px}
+.message.user .message-actions{justify-content:flex-end}
+.message-actions .speech-status{flex-basis:100%;padding:3px 10px 0}
+.document-hint{display:block;flex-basis:100%;font-size:11px;color:var(--muted);margin:0 2px}
+#composer.is-editing{width:100%;margin:0 0 12px}
+#composer.is-editing #prompt{min-height:100px;height:120px;white-space:pre-wrap}
+#composer.is-editing .modeltag,#composer.is-editing #voiceBtn{display:none}
+#composer .edit-hint{font-size:11px;margin:2px 6px 10px;line-height:1.7}
+@media(max-width:650px){.message-actions button{min-height:40px}#composer.is-editing .composerbottom{gap:6px;flex-wrap:wrap}.document-hint{font-size:10px}}
