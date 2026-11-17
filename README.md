@@ -16,7 +16,6 @@
 
 <p align="center">
   <a href="https://github.com/Mark-stimulate/afterword/actions/workflows/check.yml"><img src="https://github.com/Mark-stimulate/afterword/actions/workflows/check.yml/badge.svg" alt="自动测试与构建状态"></a>
-  &nbsp; MIT 开源 · 测试版 0.3.1 · 自带 DeepSeek API Key
 </p>
 
 ---
