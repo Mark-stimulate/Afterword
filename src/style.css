@@ -123,3 +123,9 @@ nav .conversation-more{display:flex;align-items:center;justify-content:center;pa
 .markdown-body .align-center{text-align:center}.markdown-body .align-right{text-align:right}
 .markdown-body .citation{font-size:.72em;line-height:0;padding:0 .15em}
 .message .content.markdown-fallback{white-space:pre-wrap}
+
+/* Align message and dialog footer actions consistently. */
+.message-actions{justify-content:flex-end}
+.message-actions .speech-status{text-align:right}
+#dialogBody .row:last-child{justify-content:flex-end}
+#dialogBody > button.primary{display:block;margin-left:auto}
