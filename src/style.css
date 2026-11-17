@@ -35,3 +35,15 @@ h1 em{color:var(--green)}#composer{border-color:var(--line);box-shadow:0 8px 30p
 #dialogBody audio{display:block;width:100%;margin:14px 0;border-radius:12px}html[data-night=true] audio{color-scheme:dark}
 .message .who{min-height:27px}.message .copy{min-height:30px;letter-spacing:0}
 @media(max-width:650px){.composer-tools button{min-height:40px}.attachment-card button{min-width:32px;min-height:32px}.message .copy{min-height:36px}#contextLine{font-size:9px}.composerbottom{gap:4px}.composerbottom>div{gap:4px}}
+
+/* Keep the mobile reading area open until the composer is in use. */
+@media(max-width:650px){
+ footer{padding-top:8px;padding-bottom:10px}
+ footer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) #contextLine,
+ #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composer-tools,
+ #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composerbottom,
+ #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) .attachment-tray{display:none}
+ #composer{padding:6px 10px}
+ #composer #prompt{height:90px;min-height:90px;resize:none}
+ #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) #prompt{height:44px;min-height:44px;overflow:hidden;white-space:nowrap}
+}

@@ -145,3 +145,6 @@ function closeSidebar(restoreFocus=false) { $('#sidebar').classList.remove('open
 
 function updateTitleOverflow(){for(const title of document.querySelectorAll('.conversation-title')){const distance=Math.max(0,title.scrollWidth-title.parentElement.clientWidth+26);title.style.setProperty('--title-distance',distance+'px');title.classList.toggle('scrolling',distance>1);}}
 window.addEventListener('resize',updateTitleOverflow);
+
+// Tapping the reading area dismisses the compact mobile composer without clearing drafts.
+$('#chatScroll').addEventListener('pointerdown',()=>{if(window.matchMedia('(max-width: 650px)').matches&&$('#composer').contains(document.activeElement))document.activeElement.blur();});
