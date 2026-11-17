@@ -11,6 +11,7 @@ export function normalizeSession(obj,title='导入的对话',allowEmpty=false,pr
   while(id!=null){if(seen.has(id)||!map.has(id))throw Error('消息分支损坏，未导入');seen.add(id);const m=map.get(id);branch.unshift(m);id=m.parent_id;}source=branch;
  }
  const c=newChat(String(obj.title||title).slice(0,120));
+ c.pinned=obj.pinned===true;
  c.replyName=typeof obj.replyName==='string'?obj.replyName.trim().slice(0,40):'';
  c.memory=typeof obj.memory==='string'?obj.memory.slice(0,20000):'';c.memoryEnabled=obj.memoryEnabled!==false;
  if(Array.isArray(obj.memoryCards))c.memoryCards=obj.memoryCards.slice(0,50).filter(x=>x&&typeof x.title==='string'&&typeof x.content==='string').map(x=>({id:uid(),title:x.title.slice(0,80),content:x.content.slice(0,20000)}));

@@ -1,0 +1,9 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {sealKey,openKey} from '../src/key-vault.mjs';
+import {newChat,importText,encryptBackup,decryptBackup} from '../src/core.mjs';
+const password='synthetic-password-only',value='synthetic-api-key-not-real';
+test('encrypted Key roundtrip survives JSON serialization without plaintext Key or password',async()=>{const vault=await sealKey(value,password);assert.equal(await openKey(JSON.parse(JSON.stringify(vault)),password),value);assert.ok(!JSON.stringify(vault).includes(value));assert.ok(!JSON.stringify(vault).includes(password));const other=await sealKey(value,password);assert.notEqual(vault.data,other.data);});
+test('wrong password, modified ciphertext and hostile parameters rejected',async()=>{const vault=await sealKey(value,password);await assert.rejects(openKey(vault,'another-password-only'));await assert.rejects(openKey({...vault,data:'AAAA'},password));await assert.rejects(openKey({...vault,iterations:99999999},password));await assert.rejects(openKey({...vault,salt:'AAAA'},password));await assert.rejects(openKey({...vault,format:'xuye-encrypted'},password));});
+test('weak passwords and empty or oversized Keys rejected',async()=>{await assert.rejects(sealKey(value,'short'));await assert.rejects(sealKey('',password));await assert.rejects(sealKey('x'.repeat(2049),password));});
+test('single-conversation backup retains title and pin; older backups default unpinned',async()=>{const c=newChat('合成标题');c.pinned=true;c.replyName='合成显示名称';c.memory='合成记忆';const restored=importText(await decryptBackup(await encryptBackup([c],password),password),'test.json');assert.equal(restored.length,1);assert.equal(restored[0].pinned,true);assert.equal(restored[0].title,c.title);assert.equal(restored[0].replyName,c.replyName);assert.equal(importText(JSON.stringify({format:'xuye-backup',version:1,chats:[newChat()]}),'old.json')[0].pinned,false);});

@@ -64,3 +64,10 @@ h1 em{color:var(--green)}#composer{border-color:var(--line);box-shadow:0 8px 30p
  .composer-tools button{font-size:14px}
  button.send{font-size:14px}
 }
+.conversation-row{display:flex;align-items:center;gap:2px;border-radius:9px;margin:4px 0;min-width:0}
+.conversation-row.selected{background:var(--sage)}
+nav .conversation-select{flex:1;min-width:0;width:auto;margin:0;background:none;color:var(--ink)}
+nav .conversation-more{flex:0 0 36px;width:36px;min-height:40px;margin:0;padding:6px;font-size:22px;line-height:1;text-align:center;overflow:visible}
+.conversation-menu{position:fixed;inset:auto;margin:0;padding:6px;width:180px;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px #0002}
+.conversation-menu button{display:block;width:100%;text-align:left;min-height:42px;font-size:14px}
+.conversation-menu::backdrop{background:transparent}
