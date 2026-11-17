@@ -128,4 +128,4 @@ nav .conversation-more{display:flex;align-items:center;justify-content:center;pa
 .message-actions{justify-content:flex-end}
 .message-actions .speech-status{text-align:right}
 #dialogBody .row:last-child{justify-content:flex-end}
-#dialogBody > button.primary{display:block;margin-left:auto}
+#dialogBody > button.primary,#dialogBody > button:last-child{display:block;margin-left:auto}
