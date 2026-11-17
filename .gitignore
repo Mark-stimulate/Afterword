@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.*
+*.log
+*-backup-*.json
+!示例导入.json
+
+community/
+*.private.pem
+*.private.jwk
+dist/
+*.zip
+*.pem
+*.key
+*-plaintext.json
+.DS_Store
+Thumbs.db

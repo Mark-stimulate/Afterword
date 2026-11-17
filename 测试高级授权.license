@@ -1,0 +1,5 @@
+{
+  "format": "xuye-license-v1",
+  "payload": "{\"product\":\"xuye\",\"tier\":\"pro\",\"major\":0,\"kind\":\"test\",\"id\":\"XY-LOCAL-TEST-0001\",\"notBefore\":\"2026-01-01T00:00:00Z\",\"expires\":\"2099-01-01T00:00:00Z\"}",
+  "signature": "CilGNSpaDYUiGIYdopPF+2Q6NMJhYRTUKcxF4aFYP+VWkvM3Pqu5HAm6rj7ckhDQ6QFwOocK7Ed/R8YhH7TDDw=="
+}

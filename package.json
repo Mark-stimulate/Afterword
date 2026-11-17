@@ -1,0 +1,17 @@
+{
+  "name": "afterword",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build": "node build-pages.mjs",
+    "build:community": "node build-pages.mjs --community"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "description": "拾语 · Afterword — 本地优先的 AI 续聊工具"
+}
