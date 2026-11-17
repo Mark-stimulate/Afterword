@@ -3,25 +3,25 @@ import {prepareImage,startRecording} from './browser-media.mjs';
 import {IMAGE_LIMIT,ttsRequest,sourcesFor,cleanAnnotations,validateWav} from './media.mjs';
 
 export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,apiError,loadLocal,storeLocal}) {
- let images=[],webEnabled=false,generation=0,preparing=false,dispose=()=>{};
+ let images=[],webEnabled=false,thinkingEnabled=false,generation=0,preparing=false,dispose=()=>{};
  const speech=createSpeech({getKey,getVoice:()=>loadLocal('voice','tide'),apiError});
  const cleanup=()=>{speech.stop(true);const fn=dispose;dispose=()=>{};fn();};
  const requestError=e=>e.name==='AbortError'?'已取消或请求超时；已发生的用量仍可能计费。':e.message==='Failed to fetch'?'无法直连官方服务，请检查网络或浏览器兼容性。不会自动使用代理。':e.message;
  function draw(){
   const tray=$('#attachments');tray.replaceChildren();tray.hidden=!images.length;
   images.forEach((img,i)=>{const card=el('div',undefined,'attachment-card'),pic=el('img');pic.src=img.data;pic.alt=img.name;card.append(pic,el('span',img.name));const remove=button(card,'×',()=>{images.splice(i,1);draw();});remove.setAttribute('aria-label','移除图片 '+img.name);remove.disabled=isBusy();tray.append(card);});
+  $('#thinkingBtn').setAttribute('aria-pressed',String(thinkingEnabled));$('#thinkingBtn').textContent=thinkingEnabled?'深度思考 · 开':'深度思考 · 关';
   $('#webBtn').setAttribute('aria-pressed',String(webEnabled));$('#webBtn').textContent=webEnabled?'联网 · 开':'联网 · 关';
   $('#imageBtn').textContent=preparing?'正在处理…':'图片';$('#imageBtn').disabled=preparing||isBusy();
  }
- function resetDraft(){speech.stop(true);generation++;images=[];preparing=false;webEnabled=false;$('#imageInput').value='';draw();}
+ function resetDraft(){speech.stop(true);generation++;images=[];preparing=false;webEnabled=false;thinkingEnabled=false;$('#imageInput').value='';draw();}
  $('#imageBtn').onclick=()=>{if(!isBusy())$('#imageInput').click();};
  $('#imageInput').onchange=async()=>{const files=[...$('#imageInput').files];$('#imageInput').value='';if(!files.length||preparing||isBusy())return;const run=++generation;
   if(images.length+files.length>IMAGE_LIMIT){toast('每条消息最多 4 张图片，请移除一些后再添加');return;}
   preparing=true;draw();try{const prepared=[];for(const f of files)prepared.push(await prepareImage(f));if(run!==generation)return;images.push(...prepared);toast('图片已在本地处理，发送消息时才会上传；GIF 仅取静态一帧。');}catch(e){toast(e.message);}finally{if(run===generation){preparing=false;draw();}}
  };
- $('#webBtn').onclick=()=>{if(isBusy())return;if(webEnabled){webEnabled=false;draw();return;}
-  const b=modal('让这段对话连接网页');note(b,'开启后，DeepSeek 可按问题需要搜索和读取网页，并返回来源。搜索与读取可能额外计费；不会把结果图片自动加载到页面。','notice');note(b,'这个开关只保留在当前页面，切换对话或刷新后关闭。聊天与记忆仍会按「查看发送内容」中的范围发送。');button(b,'开启联网',()=>{webEnabled=true;draw();$('#dialog').close();},'primary');
- };
+ $('#webBtn').onclick=()=>{if(isBusy())return;webEnabled=!webEnabled;draw();};
+ $('#thinkingBtn').onclick=()=>{if(isBusy())return;thinkingEnabled=!thinkingEnabled;draw();};
  function temporaryPanel(title){const b=modal(title),ctl=new AbortController(),urls=[],audios=[];let timeout;
   dispose=()=>{ctl.abort();clearTimeout(timeout);for(const a of audios){a.pause();a.removeAttribute('src');a.load();}urls.forEach(u=>URL.revokeObjectURL(u));};
   return {b,ctl,alive:()=>!ctl.signal.aborted&&b.isConnected&&$('#dialog').open,timeout(ms){clearTimeout(timeout);timeout=setTimeout(()=>ctl.abort(),ms);},clearTimeout(){clearTimeout(timeout);},audio(blob){const a=el('audio');a.controls=true;a.preload='metadata';a.setAttribute('aria-label','试听音频');const url=URL.createObjectURL(blob);urls.push(url);audios.push(a);a.src=url;b.append(a);a.onerror=()=>{if(!ctl.signal.aborted)toast('这段音频无法播放，请重新生成或更换浏览器');};return a;}};
@@ -60,5 +60,5 @@ export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,
   if(message.toolStatus)article.append(el('p',message.toolStatus,'subtle'));
  }
  $('#voiceBtn').onclick=voicePanel;
- return {draw,cleanup,stopSpeech:()=>speech.stop(true),resetDraft,readAloud,renderContent,renderExtras,options:()=>({images:[...images],webEnabled}),assertReady(){if(preparing)throw Error('图片正在处理，请稍候再发送');},sent(){images=[];draw();},settings(){const b=modal('图片、语音与联网');note(b,'这些功能的入口免费开放，调用费用由 DeepSeek 按你的账户计收。');const label=el('label','朗读声音'),select=el('select');select.id='speechVoice';label.htmlFor=select.id;for(const [id,name]of [['stella','Stella · 女声'],['tide','Tide · 男声']]){const option=el('option',name);option.value=id;select.append(option);}select.value=loadLocal('voice','tide')==='stella'?'stella':'tide';select.onchange=()=>{try{storeLocal('voice',select.value);speech.stop(true);toast('朗读声音已保存');}catch(e){toast(e.message);}};b.append(label,select);for(const [title,text]of [['图片','输入框下方点击「图片」。每次最多 4 张，原图每张不超过 8 MB；本地缩放至最长边 1536 像素并重新编码，不保留原图元数据；GIF 仅取一帧。历史与本轮合计最多 8 张，超出时移除最早的完整对话轮次。'],['语音输入','点击「语音」录音，试听后转成文字，检查再发送。关闭窗口会停止录音或请求并释放音频。'],['回复朗读','完整回复旁点击「朗读」即生成并播放，再点可停止。朗读文字会发送给 DeepSeek 并单独计费；声音在上方选择。同一段音频在本页可重复播放，切换对话、重新渲染消息或关闭页面后释放。'],['联网','默认关闭，开启后由模型决定搜索和读取网页。答案显示引用，来源链接只在你点击时访问。切换对话或刷新后关闭。'],['本地数据','发送的处理后图片和引用随对话保存在本机，并包含在 v2 备份中；麦克风录音、朗读音频和 Key 不进入备份。']]){b.append(el('h3',title));note(b,text);}}};
+ return {draw,cleanup,stopSpeech:()=>speech.stop(true),resetDraft,readAloud,renderContent,renderExtras,options:()=>({images:[...images],webEnabled,thinkingEnabled}),assertReady(){if(preparing)throw Error('图片正在处理，请稍候再发送');},sent(){images=[];draw();},settings(){const b=modal('图片、语音与联网');note(b,'这些功能的入口免费开放，调用费用由 DeepSeek 按你的账户计收。');const label=el('label','朗读声音'),select=el('select');select.id='speechVoice';label.htmlFor=select.id;for(const [id,name]of [['stella','Stella · 女声'],['tide','Tide · 男声']]){const option=el('option',name);option.value=id;select.append(option);}select.value=loadLocal('voice','tide')==='stella'?'stella':'tide';select.onchange=()=>{try{storeLocal('voice',select.value);speech.stop(true);toast('朗读声音已保存');}catch(e){toast(e.message);}};b.append(label,select);for(const [title,text]of [['图片','输入框下方点击「图片」。每次最多 4 张，原图每张不超过 8 MB；本地缩放至最长边 1536 像素并重新编码，不保留原图元数据；GIF 仅取一帧。历史与本轮合计最多 8 张，超出时移除最早的完整对话轮次。'],['语音输入','点击「语音」录音，试听后转成文字，检查再发送。关闭窗口会停止录音或请求并释放音频。'],['回复朗读','完整回复旁点击「朗读」即生成并播放，再点可停止。朗读文字会发送给 DeepSeek 并单独计费；声音在上方选择。同一段音频在本页可重复播放，切换对话、重新渲染消息或关闭页面后释放。'],['深度思考','默认关闭，点击输入区的开关直接切换。开启后模型先思考再回答，可能增加等待时间和 API 用量；可与联网同时开启。切换对话或刷新后关闭。'],['联网','默认关闭，点击开关直接切换；开启后由模型决定搜索和读取网页。答案显示引用，来源链接只在你点击时访问。切换对话或刷新后关闭。'],['本地数据','发送的处理后图片和引用随对话保存在本机，并包含在 v2 备份中；麦克风录音、朗读音频和 Key 不进入备份。']]){b.append(el('h3',title));note(b,text);}}};
 }

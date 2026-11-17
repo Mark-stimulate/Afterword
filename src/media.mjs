@@ -34,20 +34,22 @@ export function sourcesFor(message) {
  for(const step of Array.isArray(message.server_tool_calls)?message.server_tool_calls:[])for(const call of Array.isArray(step?.calls)?step.calls:[]){if(call?.status==='completed'){for(const source of Array.isArray(call.sources)?call.sources:[])add(source);add(call.page);}}
  return out;
 }
-export function chatRequest(messages, webEnabled=false) {
- return {model:'deepseek-flash',messages,thinking:{type:'disabled'},safety_check:{level:'high'},stream:true,stream_options:{include_usage:true},max_tokens:4096,...(webEnabled?{tools:[{type:'deepseek_web_search'},{type:'deepseek_read_url'}]}:{})};
+export function chatRequest(messages, webEnabled=false, thinkingEnabled=false) {
+ return {model:'deepseek-flash',messages,thinking:{type:thinkingEnabled?'enabled':'disabled'},safety_check:{level:'high'},stream:true,stream_options:{include_usage:true},max_tokens:thinkingEnabled?8192:4096,...(webEnabled?{tools:[{type:'deepseek_web_search'},{type:'deepseek_read_url'}]}:{})};
 }
 export function applyChunk(reply,data) {
  if(data.usage)reply.usage=data.usage;
  if(data.error)throw Error('官方服务返回错误，已保留收到的内容。');
  const choice=data.choices?.[0],delta=choice?.delta||{};
+ if(typeof delta.reasoning_content==='string'){reply.reasoning_content=(reply.reasoning_content||'')+delta.reasoning_content;reply.thinking=true;}
+ if(typeof delta.content==='string'&&delta.content)delete reply.thinking;
  if(typeof delta.content==='string')reply.content+=delta.content;
  if(Array.isArray(delta.annotations))reply.annotations=cleanAnnotations(delta.annotations);
  if(Array.isArray(delta.server_tool_calls))reply.server_tool_calls=delta.server_tool_calls;
  const event=choice?.server_tool_event;
  if(event?.type==='call_started')reply.toolStatus='正在查找网页资料…';
  if(event?.type==='call_completed')reply.toolStatus=event.call?.status==='failed'?'部分网页资料未能读取，正在继续…':'资料已返回，正在整理回复…';
- if(choice?.finish_reason){delete reply.toolStatus;if(choice.finish_reason==='length')reply.error='已达到本次输出上限，回复可能未完整。';if(choice.finish_reason==='content_filter'||delta.refusal){reply.content='';reply.annotations=[];throw Error('官方服务未能提供这次回复。请调整内容后重试。');}}
+ if(choice?.finish_reason){delete reply.toolStatus;delete reply.thinking;if(choice.finish_reason==='length')reply.error='已达到本次输出上限，回复可能未完整。';if(choice.finish_reason==='content_filter'||delta.refusal){reply.content='';reply.reasoning_content='';reply.annotations=[];if(reply.server_tool_calls)reply.server_tool_calls=reply.server_tool_calls.map(step=>({...step,reasoning_content:''}));throw Error('官方服务未能提供这次回复。请调整内容后重试。');}}
  return !!choice?.finish_reason;
 }
 export function previewMessages(messages) {

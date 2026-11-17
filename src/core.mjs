@@ -11,6 +11,7 @@ export function normalizeSession(obj,title='导入的对话',allowEmpty=false,pr
   while(id!=null){if(seen.has(id)||!map.has(id))throw Error('消息分支损坏，未导入');seen.add(id);const m=map.get(id);branch.unshift(m);id=m.parent_id;}source=branch;
  }
  const c=newChat(String(obj.title||title).slice(0,120));
+ c.replyName=typeof obj.replyName==='string'?obj.replyName.trim().slice(0,40):'';
  c.memory=typeof obj.memory==='string'?obj.memory.slice(0,20000):'';c.memoryEnabled=obj.memoryEnabled!==false;
  if(Array.isArray(obj.memoryCards))c.memoryCards=obj.memoryCards.slice(0,50).filter(x=>x&&typeof x.title==='string'&&typeof x.content==='string').map(x=>({id:uid(),title:x.title.slice(0,80),content:x.content.slice(0,20000)}));
  c.messages=source.flatMap(m=>{
@@ -21,7 +22,7 @@ export function normalizeSession(obj,title='导入的对话',allowEmpty=false,pr
   const failed=m.incomplete===true||(m.status&&!['FINISHED','INCOMPLETE'].includes(m.status));
   const message={role,content,incomplete:!!failed};
   if(images.length)message.images=images;
-  if(preserveMedia&&role==='assistant'){message.annotations=cleanAnnotations(m.annotations);if(Array.isArray(m.server_tool_calls)&&JSON.stringify(m.server_tool_calls).length<=500000)message.server_tool_calls=m.server_tool_calls;if(m.usage&&typeof m.usage==='object')message.usage=m.usage;}
+  if(preserveMedia&&role==='assistant'){if(typeof m.reasoning_content==='string'&&m.reasoning_content.length<=500000)message.reasoning_content=m.reasoning_content;message.annotations=cleanAnnotations(m.annotations);if(Array.isArray(m.server_tool_calls)&&JSON.stringify(m.server_tool_calls).length<=500000)message.server_tool_calls=m.server_tool_calls;if(m.usage&&typeof m.usage==='object')message.usage=m.usage;}
   return [message];
  });
  if(!c.messages.length&&!c.memory&&!allowEmpty)throw Error('没有识别到可导入的文本消息');return c;
@@ -39,9 +40,9 @@ export function contextFor(chat,prompt,options={}){
  const system='你是一个中文 AI 助手。诚实说明记忆和能力边界，不假装拥有未提供的历史。以下记忆由用户编辑，可能不准确，仅作背景参考。\n'+memory;
  const history=chat.messages.filter(m=>!m.incomplete&&(m.content||m.images?.length));
  let recent=history.slice(-20);while(recent[0]?.role==='assistant')recent.shift();
- const tooLarge=()=>recent.reduce((n,m)=>n+m.content.length,0)>40000||recent.reduce((n,m)=>n+(m.images?.length||0),images.length)>8;
+ const tooLarge=()=>recent.reduce((n,m)=>n+m.content.length+(options.webEnabled&&options.thinkingEnabled?(m.reasoning_content?.length||0):0),0)>40000||recent.reduce((n,m)=>n+(m.images?.length||0),images.length)>8;
  while(recent.length&&tooLarge()){recent.shift();while(recent[0]?.role==='assistant')recent.shift();}
- const message=m=>({role:m.role,content:m.images?.length?[...(m.content?[{type:'text',text:m.content}]:[]),...cleanImages(m.images).map(i=>({type:'image_url',image_url:{url:i.data}}))]:m.content,...(options.webEnabled&&m.role==='assistant'&&m.server_tool_calls?{server_tool_calls:m.server_tool_calls}:{})});
+ const message=m=>({role:m.role,content:m.images?.length?[...(m.content?[{type:'text',text:m.content}]:[]),...cleanImages(m.images).map(i=>({type:'image_url',image_url:{url:i.data}}))]:m.content,...(options.webEnabled&&options.thinkingEnabled&&m.role==='assistant'?{reasoning_content:m.reasoning_content||''}:{}),...(options.webEnabled&&m.role==='assistant'&&m.server_tool_calls?{server_tool_calls:m.server_tool_calls}:{})});
  return [{role:'system',content:system},...recent.map(message),...(prompt||images.length?[message({role:'user',content:prompt,images})]:[])];
 }
 export async function readSSE(body,onData){
