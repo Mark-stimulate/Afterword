@@ -1,3 +1,4 @@
+import {cleanDocuments,documentParts} from './documents.mjs';
 import {cleanImages,cleanAnnotations} from './media.mjs';
 export const uid=()=>crypto.randomUUID();
 export function newChat(title='新的篇章'){return {id:uid(),title,memory:'',memoryEnabled:true,messages:[],created:Date.now()};}
@@ -18,11 +19,11 @@ export function normalizeSession(obj,title='导入的对话',allowEmpty=false,pr
  c.messages=source.flatMap(m=>{
   const role=String(m.role||'').toLowerCase();if(!['user','assistant'].includes(role))return [];
   let content=typeof m.content==='string'?m.content:Array.isArray(m.fragments)?m.fragments.filter(f=>['REQUEST','RESPONSE'].includes(f.type)).map(f=>f.content||'').join('\n'):'';
-  const images=preserveMedia&&role==='user'?cleanImages(m.images):[];
-  if(!content&&!images.length)return [];if(content.length>500000)throw Error('单条消息过长');
+  const images=preserveMedia&&role==='user'?cleanImages(m.images):[],documents=preserveMedia&&role==='user'?cleanDocuments(m.documents):[];
+  if(!content&&!images.length&&!documents.length)return [];if(content.length>500000)throw Error('单条消息过长');
   const failed=m.incomplete===true||(m.status&&!['FINISHED','INCOMPLETE'].includes(m.status));
   const message={role,content,incomplete:!!failed};
-  if(images.length)message.images=images;
+  if(images.length)message.images=images;if(documents.length)message.documents=documents;
   if(preserveMedia&&role==='assistant'){if(typeof m.reasoning_content==='string'&&m.reasoning_content.length<=500000)message.reasoning_content=m.reasoning_content;message.annotations=cleanAnnotations(m.annotations);if(Array.isArray(m.server_tool_calls)&&JSON.stringify(m.server_tool_calls).length<=500000)message.server_tool_calls=m.server_tool_calls;if(m.usage&&typeof m.usage==='object')message.usage=m.usage;}
   return [message];
  });
@@ -36,15 +37,21 @@ export function importText(text,name){
  if(!Array.isArray(list)||list.length>500)throw Error('最多导入 500 段对话');
  return list.map(c=>normalizeSession(c,name,data.format==='xuye-backup',data.format==='xuye-backup'));
 }
+export function deviceTimeContext(now=new Date(),timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone){
+ const fields=new Intl.DateTimeFormat('en-GB',{timeZone,calendar:'gregory',numberingSystem:'latn',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',timeZoneName:'longOffset'}).formatToParts(now);
+ const part=name=>fields.find(p=>p.type===name)?.value;
+ const local=`${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`;
+ return `本次请求的设备时间：${local}；时区：${timeZone}（${part('timeZoneName')}）；UTC：${now.toISOString()}。询问现实中的今天、现在或日期时，以此设备时间为依据；设备时钟可能有误。故事内的日期遵循剧情设定，不与现实日期混淆。联网工具可用不代表已经检索，不要声称执行了未发生的搜索。`;
+}
 export function contextFor(chat,prompt,options={}){
- const images=cleanImages(options.images),memory=chat.memoryEnabled?chat.memory:'';
- const system='你是一个中文 AI 助手。诚实说明记忆和能力边界，不假装拥有未提供的历史。以下记忆由用户编辑，可能不准确，仅作背景参考。\n'+memory;
- const history=chat.messages.filter(m=>!m.incomplete&&(m.content||m.images?.length));
+ const images=cleanImages(options.images),documents=cleanDocuments(options.documents),now=options.now||new Date(),memory=chat.memoryEnabled?chat.memory:'';
+ const system='你是一个中文 AI 助手。诚实说明记忆和能力边界，不假装拥有未提供的历史。\n'+deviceTimeContext(now,options.timeZone)+'\n以下记忆由用户编辑，可能不准确，仅作背景参考。\n'+memory;
+ const history=chat.messages.filter(m=>!m.incomplete&&(m.content||m.images?.length||m.documents?.length));
  let recent=history.slice(-20);while(recent[0]?.role==='assistant')recent.shift();
- const tooLarge=()=>recent.reduce((n,m)=>n+m.content.length+(options.webEnabled&&options.thinkingEnabled?(m.reasoning_content?.length||0):0),0)>40000||recent.reduce((n,m)=>n+(m.images?.length||0),images.length)>8;
+ const tooLarge=()=>recent.reduce((n,m)=>n+m.content.length+(options.webEnabled&&options.thinkingEnabled?(m.reasoning_content?.length||0):0),0)>40000||recent.reduce((n,m)=>n+(m.images?.length||0),images.length)>8||recent.reduce((n,m)=>n+(m.documents?.length||0),documents.length)>20;
  while(recent.length&&tooLarge()){recent.shift();while(recent[0]?.role==='assistant')recent.shift();}
- const message=m=>({role:m.role,content:m.images?.length?[...(m.content?[{type:'text',text:m.content}]:[]),...cleanImages(m.images).map(i=>({type:'image_url',image_url:{url:i.data}}))]:m.content,...(options.webEnabled&&options.thinkingEnabled&&m.role==='assistant'?{reasoning_content:m.reasoning_content||''}:{}),...(options.webEnabled&&m.role==='assistant'&&m.server_tool_calls?{server_tool_calls:m.server_tool_calls}:{})});
- return [{role:'system',content:system},...recent.map(message),...(prompt||images.length?[message({role:'user',content:prompt,images})]:[])];
+ const message=m=>({role:m.role,content:m.images?.length||m.documents?.length?[...(m.content?[{type:'text',text:m.content}]:[]),...cleanImages(m.images).map(i=>({type:'image_url',image_url:{url:i.data}})),...documentParts(m.documents,now.getTime())]:m.content,...(options.webEnabled&&options.thinkingEnabled&&m.role==='assistant'?{reasoning_content:m.reasoning_content||''}:{}),...(options.webEnabled&&m.role==='assistant'&&m.server_tool_calls?{server_tool_calls:m.server_tool_calls}:{})});
+ return [{role:'system',content:system},...recent.map(message),...(prompt||images.length||documents.length?[message({role:'user',content:prompt,images,documents})]:[])];
 }
 export async function readSSE(body,onData){
  const reader=body.getReader();const decoder=new TextDecoder();let buffer='',doneSignal=false;

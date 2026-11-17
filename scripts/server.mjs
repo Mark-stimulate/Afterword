@@ -1,6 +1,6 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
-const files={'/key-vault.mjs':'key-vault.mjs','/speech.mjs':'speech.mjs','/community.license':'../examples/社区免费授权.license','/media-ui.mjs':'media-ui.mjs','/media.mjs':'media.mjs','/browser-media.mjs':'browser-media.mjs','/recorder-worklet.js':'recorder-worklet.js','/zip-import.mjs':'zip-import.mjs','/license.mjs':'license.mjs','/appearance.mjs':'appearance.mjs','/build-config.mjs':'build-config.mjs','/':'index.html','/index.html':'index.html','/app.js':'app.js','/core.mjs':'core.mjs','/style.css':'style.css'};
+const files={'/documents.mjs':'documents.mjs','/document-ui.mjs':'document-ui.mjs','/key-vault.mjs':'key-vault.mjs','/speech.mjs':'speech.mjs','/community.license':'../examples/社区免费授权.license','/media-ui.mjs':'media-ui.mjs','/media.mjs':'media.mjs','/browser-media.mjs':'browser-media.mjs','/recorder-worklet.js':'recorder-worklet.js','/zip-import.mjs':'zip-import.mjs','/license.mjs':'license.mjs','/appearance.mjs':'appearance.mjs','/build-config.mjs':'build-config.mjs','/':'index.html','/index.html':'index.html','/app.js':'app.js','/core.mjs':'core.mjs','/style.css':'style.css'};
 http.createServer(async(req,res)=>{
  const path=new URL(req.url,'http://localhost').pathname;
  if(req.method!=='GET'||!files[path]){res.writeHead(404);res.end('Not found');return;}
