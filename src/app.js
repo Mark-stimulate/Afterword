@@ -48,7 +48,7 @@ function preview(){mediaUI.assertReady();const c=chat()||newChat(),options=media
 
 function managePanel(){dialogReturn=null;const b=modal('设置与管理');$('#closeDialog').setAttribute('aria-label','关闭');note(b,'连接、外观和数据管理都在这里。');const menu=el('div',undefined,'manage-menu');b.append(menu);for(const [label,open]of [['连接与 API 设置',settings],['颜色与阅读',appearancePanel],['图片、语音与联网',()=>mediaUI.settings()],['用量与余额',usagePanel],['备份与恢复',backup],['高级功能 · 授权',licensePanel],['使用指南与数据说明',guide]])button(menu,label,()=>{open();dialogReturn=managePanel;$('#closeDialog').setAttribute('aria-label','返回设置与管理');});}
 function usagePanel(){
- const b=modal('用量与余额');note(b,'只有打开本页才显示用量；余额仅在你点击查询后，通过浏览器直连 DeepSeek 官方 API。','notice');
+ const b=modal('用量与余额');
  let input=0,output=0,count=0;for(const c of chats)for(const m of c.messages||[]){const u=m.usage;if(u&&Number.isFinite(u.prompt_tokens)&&Number.isFinite(u.completion_tokens)&&u.prompt_tokens>=0&&u.completion_tokens>=0){input+=u.prompt_tokens;output+=u.completion_tokens;count++;}}
  note(b,`本设备当前保存的用量：${count} 次有记录的回复，输入 ${input.toLocaleString()} / 输出 ${output.toLocaleString()} token。`,'test-result');note(b,'这是聊天文字与图片的 token 记录，不包含语音识别、朗读、搜索和网页读取的工具费用，也并非账户总用量；导入、删除、停止生成或未返回用量的请求可能不计入，不能据此计算账单。');
  const status=el('p','点击下方按钮查询当前账号余额。','test-result');status.setAttribute('role','status');status.setAttribute('aria-live','polite');b.append(status);
