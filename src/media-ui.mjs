@@ -8,8 +8,8 @@ export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,
  function draw(){
   const tray=$('#attachments');tray.replaceChildren();tray.hidden=!images.length;
   images.forEach((img,i)=>{const card=el('div',undefined,'attachment-card'),pic=el('img');pic.src=img.data;pic.alt=img.name;card.append(pic,el('span',img.name));const remove=button(card,'×',()=>{images.splice(i,1);draw();});remove.setAttribute('aria-label','移除图片 '+img.name);remove.disabled=isBusy();tray.append(card);});
-  $('#webBtn').setAttribute('aria-pressed',String(webEnabled));$('#webBtn').textContent=webEnabled?'◎ 联网 · 开':'◎ 联网 · 关';
-  $('#imageBtn').textContent=preparing?'正在处理…':'▧ 图片';$('#imageBtn').disabled=preparing||isBusy();
+  $('#webBtn').setAttribute('aria-pressed',String(webEnabled));$('#webBtn').textContent=webEnabled?'联网 · 开':'联网 · 关';
+  $('#imageBtn').textContent=preparing?'正在处理…':'图片';$('#imageBtn').disabled=preparing||isBusy();
  }
  function resetDraft(){generation++;images=[];preparing=false;webEnabled=false;$('#imageInput').value='';draw();}
  $('#imageBtn').onclick=()=>{if(!isBusy())$('#imageInput').click();};

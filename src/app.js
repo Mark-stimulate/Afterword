@@ -15,7 +15,7 @@ function storeLocal(name,value){try{localStorage.setItem('xuye-'+name,JSON.strin
 function applyAppearance(value){appearance=cleanAppearance(value);for(const [name,v]of Object.entries(themeVars(appearance)))document.documentElement.style.setProperty(name,v);document.documentElement.dataset.night=String(appearance.night);}
 applyAppearance(loadLocal('appearance',defaultAppearance));
 async function loadLicense(){const saved=loadLocal('license',null);if(saved)try{licenseInfo=await verifyLicense(saved,PUBLIC_KEY,{channel:LICENSE_CHANNEL});}catch{licenseInfo=null;}updatePlan();}
-function updatePlan(){const b=$('#licenseBtn');if(b)b.textContent=isPro()?(licenseInfo.kind==='community'?'✧ 已解锁 · 社区免费授权':'✧ 已解锁 · 站点授权'):'✧ 免费基础版 · 高级功能';const toggle=$('#fullSearch');if(toggle)toggle.checked=fullSearch&&isPro();}
+function updatePlan(){const b=$('#licenseBtn');if(b)b.textContent=isPro()?(licenseInfo.kind==='community'?'已解锁 · 社区免费授权':'已解锁 · 站点授权'):'免费基础版 · 高级功能';const toggle=$('#fullSearch');if(toggle)toggle.checked=fullSearch&&isPro();}
 const chat=()=>chats.find(c=>c.id===current);
 function toast(t){($('#dialog').open?$('#dialog'):document.body).append($('#toast'));$('#toast').textContent=t;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
 async function initDB(){db=await new Promise((resolve,reject)=>{const r=indexedDB.open('xuye-local-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const data=await new Promise((resolve,reject)=>{const r=db.transaction('state').objectStore('state').get('chats');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});chats=Array.isArray(data)?data:[];current=chats[0]?.id||null;render();}
@@ -34,7 +34,7 @@ function render(){
  const list=$('#messages');list.replaceChildren();for(const m of c?.messages||[]){
   const article=el('article',undefined,'message '+m.role),head=el('div',m.role==='user'?'你 / YOU':'拾语 · Afterword / AI 生成','who');
   if(m.content)button(head,'复制',async()=>{await navigator.clipboard.writeText(m.content);toast('已复制');},'copy');
-  if(m.role==='assistant'&&m.content&&!m.incomplete){const read=button(head,'♩ 朗读',()=>mediaUI.readAloud(m),'copy');read.disabled=busy;}
+  if(m.role==='assistant'&&m.content&&!m.incomplete){const read=button(head,'朗读',()=>mediaUI.readAloud(m),'copy');read.disabled=busy;}
   const content=el('div',undefined,'content');if(m.content)mediaUI.renderContent(content,m);else if(m.role==='assistant')content.textContent=m.error?'这次没有生成可显示的回复。':'正在等待回复…';
   article.append(head,content);mediaUI.renderExtras(article,m);
   if(m.incomplete)article.append(el('div','未完成回复，不会作为后续上下文发送。','meta'));if(m.error)article.append(el('p',m.error,'error'));list.append(article);
@@ -45,7 +45,7 @@ function render(){
 async function makeChat(){mediaUI?.resetDraft();const c=newChat();chats.unshift(c);current=c.id;await save();render();$('#prompt').focus();}
 function preview(){mediaUI.assertReady();const c=chat()||newChat(),options=mediaUI.options(),b=modal('本次会发送什么');note(b,'以下消息将从浏览器直接发送至 DeepSeek。图片数据在此用占位说明代替；实际请求包含图片。','notice');note(b,options.webEnabled?'联网已开启：模型可搜索、读取网页，可能额外计费。':'联网关闭：本次不启用搜索或读取网页工具。');const msgs=contextFor(c,$('#prompt').value.trim(),options);b.append(el('pre',JSON.stringify(previewMessages(msgs),null,2)));note(b,'这不是全部历史。官方 ZIP 中的附件与其他分支不会自动导入。');}
 
-function managePanel(){const b=modal('设置与管理');note(b,'连接、外观和数据管理都在这里。');const menu=el('div',undefined,'manage-menu');b.append(menu);button(menu,'⚙ 连接与 API 设置',settings);button(menu,'◐ 颜色与阅读',appearancePanel);button(menu,'♩ 图片、语音与联网',()=>mediaUI.settings());button(menu,'◌ 用量与余额',usagePanel);button(menu,'▣ 备份与恢复',backup);button(menu,'✧ 高级功能 · 授权',licensePanel);button(menu,'ⓘ 使用指南与数据说明',guide);}
+function managePanel(){const b=modal('设置与管理');note(b,'连接、外观和数据管理都在这里。');const menu=el('div',undefined,'manage-menu');b.append(menu);button(menu,'连接与 API 设置',settings);button(menu,'颜色与阅读',appearancePanel);button(menu,'图片、语音与联网',()=>mediaUI.settings());button(menu,'用量与余额',usagePanel);button(menu,'备份与恢复',backup);button(menu,'高级功能 · 授权',licensePanel);button(menu,'使用指南与数据说明',guide);}
 function usagePanel(){
  const b=modal('用量与余额');note(b,'只有打开本页才显示用量；余额仅在你点击查询后，通过浏览器直连 DeepSeek 官方 API。','notice');
  let input=0,output=0,count=0;for(const c of chats)for(const m of c.messages||[]){const u=m.usage;if(u&&Number.isFinite(u.prompt_tokens)&&Number.isFinite(u.completion_tokens)&&u.prompt_tokens>=0&&u.completion_tokens>=0){input+=u.prompt_tokens;output+=u.completion_tokens;count++;}}
