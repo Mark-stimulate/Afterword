@@ -129,3 +129,6 @@ nav .conversation-more{display:flex;align-items:center;justify-content:center;pa
 .message-actions .speech-status{text-align:right}
 #dialogBody .row:last-child{justify-content:flex-end}
 #dialogBody > button.primary,#dialogBody > button:last-child{display:block;margin-left:auto}
+
+/* Keep short status messages clear of the composer and mobile safe area. */
+#toast{top:max(16px,env(safe-area-inset-top));bottom:auto;z-index:100;width:max-content;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}
