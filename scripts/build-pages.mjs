@@ -5,7 +5,7 @@ const community=process.argv.includes('--community');
 const config=await buildLicenseConfig({community,publicKeyText:process.env.AFTERWORD_LICENSE_PUBLIC_KEY});
 const root=new URL('../',import.meta.url),out=new URL('./dist/',root);
 await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
-for(const name of ['index.html','style.css','app.js','core.mjs','media.mjs','media-ui.mjs','browser-media.mjs','recorder-worklet.js','zip-import.mjs','appearance.mjs','license.mjs','build-config.mjs','LICENSE']){
+for(const name of ['index.html','style.css','app.js','core.mjs','media.mjs','media-ui.mjs','speech.mjs','browser-media.mjs','recorder-worklet.js','zip-import.mjs','appearance.mjs','license.mjs','build-config.mjs','LICENSE']){
  let text=await readFile(new URL(name==='LICENSE'?name:'src/'+name,root),'utf8');
  if(/\.(mjs|js)$/.test(name))text=text.replace(/\.mjs(['"])/g,'.js$1');
  if(name==='build-config.mjs')text=configSource(config);

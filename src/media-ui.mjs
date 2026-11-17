@@ -1,9 +1,11 @@
+import {createSpeech} from './speech.mjs';
 import {prepareImage,startRecording} from './browser-media.mjs';
 import {IMAGE_LIMIT,ttsRequest,sourcesFor,cleanAnnotations,validateWav} from './media.mjs';
 
 export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,apiError,loadLocal,storeLocal}) {
  let images=[],webEnabled=false,generation=0,preparing=false,dispose=()=>{};
- const cleanup=()=>{const fn=dispose;dispose=()=>{};fn();};
+ const speech=createSpeech({getKey,getVoice:()=>loadLocal('voice','tide'),apiError});
+ const cleanup=()=>{speech.stop(true);const fn=dispose;dispose=()=>{};fn();};
  const requestError=e=>e.name==='AbortError'?'已取消或请求超时；已发生的用量仍可能计费。':e.message==='Failed to fetch'?'无法直连官方服务，请检查网络或浏览器兼容性。不会自动使用代理。':e.message;
  function draw(){
   const tray=$('#attachments');tray.replaceChildren();tray.hidden=!images.length;
@@ -11,7 +13,7 @@ export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,
   $('#webBtn').setAttribute('aria-pressed',String(webEnabled));$('#webBtn').textContent=webEnabled?'联网 · 开':'联网 · 关';
   $('#imageBtn').textContent=preparing?'正在处理…':'图片';$('#imageBtn').disabled=preparing||isBusy();
  }
- function resetDraft(){generation++;images=[];preparing=false;webEnabled=false;$('#imageInput').value='';draw();}
+ function resetDraft(){speech.stop(true);generation++;images=[];preparing=false;webEnabled=false;$('#imageInput').value='';draw();}
  $('#imageBtn').onclick=()=>{if(!isBusy())$('#imageInput').click();};
  $('#imageInput').onchange=async()=>{const files=[...$('#imageInput').files];$('#imageInput').value='';if(!files.length||preparing||isBusy())return;const run=++generation;
   if(images.length+files.length>IMAGE_LIMIT){toast('每条消息最多 4 张图片，请移除一些后再添加');return;}
@@ -44,19 +46,8 @@ export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,
   button(row,'丢弃并关闭',()=>$('#dialog').close());
   async function finish(){if(!recorder||stopping)return;stopping=true;stop.disabled=true;status.textContent='正在整理录音…';try{blob=await recorder.stop();if(!p.alive())return;p.audio(blob);status.textContent='录音已留在本页。可以试听，再选择是否转成文字。';transcribe.disabled=false;}catch(e){if(p.alive())status.textContent=requestError(e);}}
  }
- function readAloud(message){
-  const p=temporaryPanel('听一听这段文字'),{b,ctl}=p;
-  note(b,'点击生成后，以下文字会发送给 DeepSeek 转为语音，并单独计费。音频仅保留在本页面，关闭后释放，不自动播放或写入备份。','notice');
-  const text=field(b,'本次朗读文字（可以缩短）','textarea',message.content);
-  const label=el('label','朗读声音'),select=el('select');select.id='speechVoice';label.htmlFor=select.id;
-  for(const [id,name] of [['stella','Stella · 女声'],['tide','Tide · 男声']]){const option=el('option',name);option.value=id;select.append(option);}select.value=loadLocal('voice','stella')==='tide'?'tide':'stella';b.append(label,select);
-  const status=el('p','生成后会出现播放器，由你点击播放。','test-result');status.setAttribute('role','status');b.append(status);
-  const generate=button(b,'生成朗读音频',async()=>{if(!getKey()){status.textContent='请先在连接与 API 设置中填写 Key。';return;}
-   let body;try{body=ttsRequest(text.value,select.value);}catch(e){status.textContent=e.message;return;}
-   generate.disabled=true;storeLocal('voice',select.value);status.textContent='正在生成朗读…';p.timeout(120000);
-   try{const r=await fetch('https://api.deepseek.com/v1/tools/tts',{method:'POST',headers:{Authorization:'Bearer '+getKey(),'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});if(!r.ok)throw Error(apiError(r.status));const audio=await r.blob();if(audio.size<44||!r.headers.get('content-type')?.includes('audio/'))throw Error('服务未返回有效音频，请重试');validateWav(await audio.arrayBuffer());if(!p.alive())return;p.audio(audio);status.textContent='朗读已准备好。点击播放；重复生成会再次计费。';generate.textContent='重新生成';}
-   catch(e){if(b.isConnected&&$('#dialog').open)status.textContent=requestError(e);}finally{p.clearTimeout();if(p.alive())generate.disabled=false;}
-  },'primary');
+ function readAloud(message,control,status){
+  return speech.toggle(message,(state,error)=>{control.textContent=state==='loading'?'取消朗读':state==='playing'?'停止朗读':'朗读';control.setAttribute('aria-pressed',String(state==='loading'||state==='playing'));status.textContent=state==='loading'?'正在生成朗读…':state==='playing'?'正在朗读':error||'';status.hidden=!status.textContent;});
  }
  function renderContent(container,message){
   const chars=[...(message.content||'')],annotations=cleanAnnotations(message.annotations),sources=sourcesFor(message),marks=new Map();
@@ -69,5 +60,5 @@ export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,
   if(message.toolStatus)article.append(el('p',message.toolStatus,'subtle'));
  }
  $('#voiceBtn').onclick=voicePanel;
- return {draw,cleanup,resetDraft,readAloud,renderContent,renderExtras,options:()=>({images:[...images],webEnabled}),assertReady(){if(preparing)throw Error('图片正在处理，请稍候再发送');},sent(){images=[];draw();},settings(){const b=modal('图片、语音与联网');note(b,'这些功能的入口免费开放，调用费用由 DeepSeek 按你的账户计收。');for(const [title,text]of [['图片','输入框下方点击「图片」。每次最多 4 张，原图每张不超过 8 MB；本地缩放至最长边 1536 像素并重新编码，不保留原图元数据；GIF 仅取一帧。历史与本轮合计最多 8 张，超出时移除最早的完整对话轮次。'],['语音输入','点击「语音」录音，试听后转成文字，检查再发送。关闭窗口会停止录音或请求并释放音频。'],['回复朗读','完整回复旁点击「朗读」，可编辑朗读文字、选声音，再生成和播放。'],['联网','默认关闭，开启后由模型决定搜索和读取网页。答案显示引用，来源链接只在你点击时访问。切换对话或刷新后关闭。'],['本地数据','发送的处理后图片和引用随对话保存在本机，并包含在 v2 备份中；麦克风录音、朗读音频和 Key 不进入备份。']]){b.append(el('h3',title));note(b,text);}}};
+ return {draw,cleanup,stopSpeech:()=>speech.stop(true),resetDraft,readAloud,renderContent,renderExtras,options:()=>({images:[...images],webEnabled}),assertReady(){if(preparing)throw Error('图片正在处理，请稍候再发送');},sent(){images=[];draw();},settings(){const b=modal('图片、语音与联网');note(b,'这些功能的入口免费开放，调用费用由 DeepSeek 按你的账户计收。');const label=el('label','朗读声音'),select=el('select');select.id='speechVoice';label.htmlFor=select.id;for(const [id,name]of [['stella','Stella · 女声'],['tide','Tide · 男声']]){const option=el('option',name);option.value=id;select.append(option);}select.value=loadLocal('voice','tide')==='stella'?'stella':'tide';select.onchange=()=>{try{storeLocal('voice',select.value);speech.stop(true);toast('朗读声音已保存');}catch(e){toast(e.message);}};b.append(label,select);for(const [title,text]of [['图片','输入框下方点击「图片」。每次最多 4 张，原图每张不超过 8 MB；本地缩放至最长边 1536 像素并重新编码，不保留原图元数据；GIF 仅取一帧。历史与本轮合计最多 8 张，超出时移除最早的完整对话轮次。'],['语音输入','点击「语音」录音，试听后转成文字，检查再发送。关闭窗口会停止录音或请求并释放音频。'],['回复朗读','完整回复旁点击「朗读」即生成并播放，再点可停止。朗读文字会发送给 DeepSeek 并单独计费；声音在上方选择。同一段音频在本页可重复播放，切换对话、重新渲染消息或关闭页面后释放。'],['联网','默认关闭，开启后由模型决定搜索和读取网页。答案显示引用，来源链接只在你点击时访问。切换对话或刷新后关闭。'],['本地数据','发送的处理后图片和引用随对话保存在本机，并包含在 v2 备份中；麦克风录音、朗读音频和 Key 不进入备份。']]){b.append(el('h3',title));note(b,text);}}};
 }

@@ -28,13 +28,14 @@ function field(parent,label,type='text',value=''){const id='f'+crypto.randomUUID
 function note(parent,text,cls='subtle'){parent.append(el('p',text,cls));}
 function setBusy(v){busy=v;$('#sendBtn').hidden=v;$('#stopBtn').hidden=!v;$('#prompt').disabled=v;for(const id of ['newChat','deleteBtn','memoryBtn','importBtn','backupBtn','settingsBtn','manageBtn','demoBtn','welcomeImport','libraryBtn','imageBtn','voiceBtn','webBtn'])$('#'+id).disabled=v;}
 function render(){
+ mediaUI?.stopSpeech();
  const c=chat();$('#chatTitle').textContent=c?.title||'新的篇章';$('#count').textContent=chats.length;$('#welcome').hidden=!!c?.messages.length;$('#connection').textContent=key?'Key 已配置':'未配置 API';
  const query=$('#search').value.trim().toLocaleLowerCase();const nav=$('#conversations');nav.replaceChildren();for(const c of chats.filter(c=>c.title.toLocaleLowerCase().includes(query)||(fullSearch&&isPro()&&(c.memory.toLocaleLowerCase().includes(query)||c.messages.some(m=>m.content.toLocaleLowerCase().includes(query)))))){const item=button(nav,c.title,()=>{if(busy)return toast('请先停止当前生成');current=c.id;$('#prompt').value='';mediaUI.resetDraft();render();closeSidebar();},c.id===current?'selected':'');item.setAttribute('aria-label',c.title);item.title=c.title;item.replaceChildren(el('span',c.title,'conversation-title'));if(query&&!c.title.toLocaleLowerCase().includes(query)){const match=c.messages.find(m=>m.content.toLocaleLowerCase().includes(query))?.content||c.memory;const p=match.toLocaleLowerCase().indexOf(query);item.append(el('small','…'+match.slice(Math.max(0,p-12),p+45),'search-excerpt'));}}
  requestAnimationFrame(updateTitleOverflow);updatePlan();
  const list=$('#messages');list.replaceChildren();for(const m of c?.messages||[]){
   const article=el('article',undefined,'message '+m.role),head=el('div',m.role==='user'?'你 / YOU':'拾语 · Afterword / AI 生成','who');
   if(m.content)button(head,'复制',async()=>{await navigator.clipboard.writeText(m.content);toast('已复制');},'copy');
-  if(m.role==='assistant'&&m.content&&!m.incomplete){const read=button(head,'朗读',()=>mediaUI.readAloud(m),'copy');read.disabled=busy;}
+  if(m.role==='assistant'&&m.content&&!m.incomplete){const status=el('span','','speech-status');status.hidden=true;status.setAttribute('role','status');const read=button(head,'朗读',()=>mediaUI.readAloud(m,read,status),'copy');read.title='生成语音并播放，API 单独计费';read.setAttribute('aria-pressed','false');read.disabled=busy;head.append(status);}
   const content=el('div',undefined,'content');if(m.content)mediaUI.renderContent(content,m);else if(m.role==='assistant')content.textContent=m.error?'这次没有生成可显示的回复。':'正在等待回复…';
   article.append(head,content);mediaUI.renderExtras(article,m);
   if(m.incomplete)article.append(el('div','未完成回复，不会作为后续上下文发送。','meta'));if(m.error)article.append(el('p',m.error,'error'));list.append(article);

@@ -47,3 +47,20 @@ h1 em{color:var(--green)}#composer{border-color:var(--line);box-shadow:0 8px 30p
  #composer #prompt{height:90px;min-height:90px;resize:none}
  #composer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) #prompt{height:44px;min-height:44px;overflow:hidden;white-space:nowrap}
 }
+.speech-status{display:block;clear:both;font-size:11px;letter-spacing:0;color:var(--muted);padding-top:6px;overflow-wrap:anywhere}
+
+/* Desktop hierarchy: readable controls and explanations around the reading text. */
+@media(min-width:651px){
+ body{font-size:16px}
+ nav button,.sidebottom>button,.headeractions button,#search{font-size:14px}
+ .navlabel,.search-option{font-size:12px}
+ .badge,.localnote,.message .who,.message .meta,.message .copy,.modeltag,#contextLine,.composerbottom button{font-size:12px}
+ .localnote small,.search-option span,.search-excerpt{font-size:11px}
+ #dialogBody label,.subtle,.notice,.error,details,.test-result{font-size:14px}
+ .manage-menu button{font-size:15px}
+ .palette b{font-size:14px}.palette small,.reading-sample small,.speech-status{font-size:12px}
+ .featuregrid small,.privacyline{font-size:13px}
+ #welcome>p{font-size:16px}
+ .composer-tools button{font-size:14px}
+ button.send{font-size:14px}
+}
