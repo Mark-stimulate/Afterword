@@ -89,16 +89,7 @@ npm start
 
 部署到 **Cloudflare Pages**：构建命令填 `npm test && npm run build:community`，输出目录填 `dist`。
 
-<details>
-<summary><b>运营部署：保留高级授权校验的标准版</b></summary>
-
-构建命令改为 `npm test && npm run build`，输出目录仍是 `dist`。标准版保留免费基础功能，高级功能通过签名 license 解锁。
-
-目前只有公开测试授权。正式收费前需更换验签公钥，并在仓库之外建立私钥保管与授权签发流程；项目尚未接入支付。
-
-</details>
-
-→ [部署指南：社区版与标准版](docs/deployment.md) · [源码结构与测试](docs/development.md)
+→ [社区版部署指南](docs/deployment.md) · [源码结构与测试](docs/development.md)
 
 ## 现在的边界，也想提前告诉你
 

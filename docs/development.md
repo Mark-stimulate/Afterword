@@ -18,7 +18,6 @@
 
 ```bash
 npm test
-npm run build
 npm run build:community
 ```
 
