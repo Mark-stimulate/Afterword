@@ -15,5 +15,8 @@ jobs:
           brand_status=0
           git grep -n 'After[W]ord' || brand_status=$?
           test "$brand_status" -eq 1
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Report pinned parser
+        run: node -e "console.log('PARSER_LOCK ' + JSON.stringify(JSON.parse(require('fs').readFileSync('package-lock.json','utf8')).packages['node_modules/marked']))"
       - run: npm test
       - run: npm run build:community

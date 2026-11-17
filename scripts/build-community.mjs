@@ -1,3 +1,4 @@
+import './vendor.mjs';
 // Generate a standalone community edition; no signing secret is needed.
 import {mkdir,cp,copyFile,writeFile,rm} from 'node:fs/promises';
 const root=new URL('../',import.meta.url),target=new URL('community/',root);

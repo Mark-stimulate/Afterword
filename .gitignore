@@ -17,3 +17,5 @@ dist/
 Thumbs.db
 .openai/
 src/qa-temporary/
+
+src/vendor/

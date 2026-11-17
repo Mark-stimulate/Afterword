@@ -64,3 +64,5 @@ npm run build:community
 使用新域名时，请先从旧域名导出，再在新域名恢复，并重新设置 Key、主题等本地偏好。不要立即把旧域名强制跳转，也不要清除网站数据。
 
 真实手机网络、浏览器跨域策略、真实 ZIP 导出和余额查询需要实际验证；构建成功不能代替这些检查。
+
+Markdown 解析器为固定版本的构建依赖，Cloudflare Pages 会根据 package.json 安装依赖；本地执行测试、构建或 npm start 前请先运行 npm install。构建产物已包含解析器与其许可证，不需要浏览器访问 npm 或外部 CDN。

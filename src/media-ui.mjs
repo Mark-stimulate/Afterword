@@ -1,3 +1,4 @@
+import {renderMarkdown} from './markdown.mjs';
 import {createDocumentUI} from './document-ui.mjs';
 import {createSpeech} from './speech.mjs';
 import {prepareImage,startRecording} from './browser-media.mjs';
@@ -53,10 +54,10 @@ export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,
   return speech.toggle(message,(state,error)=>{control.textContent=state==='loading'?'取消朗读':state==='playing'?'停止朗读':'朗读';control.setAttribute('aria-pressed',String(state==='loading'||state==='playing'));status.textContent=state==='loading'?'正在生成朗读…':state==='playing'?'正在朗读':error||'';status.hidden=!status.textContent;});
  }
  function renderContent(container,message){
-  const chars=[...(message.content||'')],annotations=cleanAnnotations(message.annotations),sources=sourcesFor(message),marks=new Map();
-  for(const a of annotations){const c=a.url_citation;if(c.end_index<1||c.end_index>chars.length||c.start_index<0||c.start_index>=c.end_index)continue;const number=sources.findIndex(s=>s.url===c.url)+1;if(!number)continue;const list=marks.get(c.end_index)||new Set();list.add(number);marks.set(c.end_index,list);}
-  let start=0;for(const end of [...marks.keys()].sort((a,b)=>a-b)){container.append(document.createTextNode(chars.slice(start,end).join('')));for(const n of marks.get(end)){const source=sources[n-1],a=el('a',`[${n}]`,'citation');a.href=source.url;a.target='_blank';a.rel='noopener noreferrer';a.setAttribute('aria-label','来源 '+n+'：'+source.title);container.append(a);}start=end;}container.append(document.createTextNode(chars.slice(start).join('')));
+  if(message.role==='assistant'){container.classList.add('markdown-body');renderMarkdown(container,message.content,{annotations:cleanAnnotations(message.annotations),sources:sourcesFor(message)});return;}
+  container.textContent=message.content||'';
  }
+
  function renderExtras(article,message){
   documents.render(article,message);
   if(message.images?.length){const grid=el('div',undefined,'message-images');for(const image of message.images){const a=button(grid,'',()=>{const b=modal('查看图片'),img=el('img');img.src=image.data;img.alt=image.name;img.className='image-viewer';b.append(img);note(b,'这是保存在此浏览器中的处理后图片。');});const img=el('img');img.src=image.data;img.alt=image.name;a.append(img);a.setAttribute('aria-label','查看图片 '+image.name);}article.append(grid);}
