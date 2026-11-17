@@ -8,6 +8,7 @@ async function checkImports(directory){
 }
 const root=new URL('../',import.meta.url),build=new URL('scripts/build-pages.mjs',root);
 test('build outputs share app code while official build excludes community trust and credential',async()=>{
+ for(const path of ['src/app.js','src/media-ui.mjs','src/markdown.mjs','src/key-storage.mjs']){const syntax=spawnSync(process.execPath,['--check',new URL(path,root).pathname],{encoding:'utf8'});assert.equal(syntax.status,0,syntax.stderr);}
  const run=(args=[],key)=>{const env={...process.env};delete env.AFTERWORD_LICENSE_PUBLIC_KEY;if(key)env.AFTERWORD_LICENSE_PUBLIC_KEY=JSON.stringify(key);return spawnSync(process.execPath,[build.pathname,...args],{cwd:root,env,encoding:'utf8'});};
  assert.notEqual(run().status,0);assert.notEqual(run([],PUBLIC_KEY).status,0);
  assert.equal(run(['--community']).status,0);const files=await readdir(new URL('dist/',root)),code=new Map();

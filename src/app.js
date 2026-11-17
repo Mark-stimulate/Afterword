@@ -8,7 +8,8 @@ import {verifyLicense,licenseActive} from './license.mjs';
 import {LICENSE_CHANNEL,PUBLIC_KEY} from './build-config.mjs';
 import {palettes,fonts,defaultAppearance,cleanAppearance,themeVars} from './appearance.mjs';
 const $=s=>document.querySelector(s), el=(tag,txt,cls)=>{const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;};
-const initialKey=readKeyState(localStorage);
+function savedKeyState(){try{return readKeyState(localStorage);}catch{return {mode:'none'};}}
+const initialKey=savedKeyState();
 let db,chats=[],current=null,key=initialKey.mode==='plain'?initialKey.key:'',busy=false,controller=null,toastTimer;
 let mediaUI,dialogReturn=null,editing=null;
 let licenseInfo=null,appearance={...defaultAppearance},fullSearch=false;
@@ -32,7 +33,7 @@ function note(parent,text,cls='subtle'){parent.append(el('p',text,cls));}
 function setBusy(v){busy=v;$('#cancelEdit').disabled=v;$('#sendBtn').hidden=v;$('#stopBtn').hidden=!v;$('#prompt').disabled=v;for(const id of ['newChat','deleteBtn','memoryBtn','importBtn','backupBtn','settingsBtn','manageBtn','demoBtn','welcomeImport','libraryBtn','fileBtn','imageBtn','voiceBtn','webBtn','thinkingBtn'])$('#'+id).disabled=v;}
 function render(){
  document.querySelector('.conversation-menu')?.remove();mediaUI?.stopSpeech();
- const c=chat();$('#chatTitle').textContent=c?.title||'新的篇章';$('#count').textContent=chats.length;$('#welcome').hidden=!!c?.messages.length;$('#connection').textContent=key?'Key 已配置':readKeyState(localStorage).mode==='encrypted'?'Key 待解锁':'未配置 API';
+ const c=chat();$('#chatTitle').textContent=c?.title||'新的篇章';$('#count').textContent=chats.length;$('#welcome').hidden=!!c?.messages.length;$('#connection').textContent=key?'Key 已配置':savedKeyState().mode==='encrypted'?'Key 待解锁':'未配置 API';
  const query=$('#search').value.trim().toLocaleLowerCase();const nav=$('#conversations');nav.replaceChildren();for(const c of [...chats].sort((a,b)=>Number(b.pinned===true)-Number(a.pinned===true)).filter(c=>c.title.toLocaleLowerCase().includes(query)||(fullSearch&&isPro()&&(c.memory.toLocaleLowerCase().includes(query)||c.messages.some(m=>m.content.toLocaleLowerCase().includes(query)))))){const row=el('div',undefined,'conversation-row'+(c.id===current?' selected':''));nav.append(row);const item=button(row,c.title,()=>{if(busy)return toast('请先停止当前生成');current=c.id;$('#prompt').value='';mediaUI.resetDraft();render();closeSidebar();},c.id===current?'selected':'');item.classList.add('conversation-select');item.setAttribute('aria-current',String(c.id===current));item.setAttribute('aria-label',c.title);item.title=(c.pinned?'已置顶 · ':'')+c.title;item.replaceChildren(el('span',c.title,'conversation-title'));if(query&&!c.title.toLocaleLowerCase().includes(query)){const match=c.messages.find(m=>m.content.toLocaleLowerCase().includes(query))?.content||c.memory;const p=match.toLocaleLowerCase().indexOf(query);item.append(el('small','…'+match.slice(Math.max(0,p-12),p+45),'search-excerpt'));}const more=button(row,'…',()=>conversationMenu(c,more),'conversation-more');more.setAttribute('aria-label','管理对话：'+c.title);more.setAttribute('aria-haspopup','menu');more.disabled=busy;centerMenuDots(more);}
  requestAnimationFrame(updateTitleOverflow);updatePlan();
  const composer=$('#composer');$('footer').append(composer);if(editing&&editing.chatId!==c?.id)finishEdit(false);
@@ -85,7 +86,7 @@ function usagePanel(){
  const billing=el('p',undefined,'subtle');billing.append(document.createTextNode('需要查看详细账单？'));const a=el('a','打开 DeepSeek 开放平台（新标签页）');a.href='https://platform.deepseek.com/';a.target='_blank';a.rel='noopener noreferrer';billing.append(a);b.append(billing);
 }
 function settings(){
- const b=modal('连接你的 DeepSeek'),saved=readKeyState(localStorage);
+ const b=modal('连接你的 DeepSeek'),saved=savedKeyState();
  note(b,'Key 默认自动保存在当前浏览器，刷新后继续使用。你也可以选择密码加密。聊天备份不包含 Key。','notice');
  const k=field(b,'API Key','password',key);k.autocomplete='off';k.spellcheck=false;k.maxLength=2048;
  const controls=el('div',undefined,'row');b.append(controls);button(controls,'显示 / 隐藏',()=>k.type=k.type==='password'?'text':'password');button(controls,'清除当前及保存的 Key',()=>{clearSavedKey(localStorage);key='';k.value='';render();close();toast('当前及本机保存的 Key 已移除');});
@@ -94,11 +95,11 @@ function settings(){
  const status=el('p','','test-result');status.setAttribute('role','status');status.setAttribute('aria-live','polite');b.append(status);
  const encrypted=el('div');b.append(encrypted);
  if(saved.mode==='encrypted'){const unlockPassword=field(encrypted,'输入本机保存密码','password');unlockPassword.autocomplete='off';const unlockRow=el('div',undefined,'row');encrypted.append(unlockRow);
-  const unlock=button(unlockRow,'解锁已保存的 Key',async()=>{unlock.disabled=true;try{const state=readKeyState(localStorage);if(state.mode!=='encrypted')throw Error('当前没有加密保存的 Key，请检查保存方式');key=await openKey(state.vault,unlockPassword.value);unlockPassword.value='';k.value='';render();close();toast('Key 已解锁，可在当前页面使用');}finally{unlock.disabled=false;}},'primary');
+  const unlock=button(unlockRow,'解锁已保存的 Key',async()=>{unlock.disabled=true;try{const state=savedKeyState();if(state.mode!=='encrypted')throw Error('当前没有加密保存的 Key，请检查保存方式');key=await openKey(state.vault,unlockPassword.value);unlockPassword.value='';k.value='';render();close();toast('Key 已解锁，可在当前页面使用');}finally{unlock.disabled=false;}},'primary');
  }
  note(encrypted,'设置一个新的本机保存密码，用它保护 API Key，与 DeepSeek 登录密码无关。完成加密后，刷新需输入此密码解锁；密码不会保存，也不能找回。忘记后可清除已保存的 Key 并重新填写，不影响聊天。');
  const password=field(encrypted,'设置本机保存密码（至少 12 个字符）','password'),again=field(encrypted,'再次输入本机保存密码','password');password.autocomplete=again.autocomplete='new-password';
- function describeMode(){encrypted.hidden=mode.value!=='encrypted';const state=readKeyState(localStorage);status.textContent=mode.value==='plain'?'填写后自动保存。当前为未加密保存，请在自己信任的设备上使用。':state.mode==='plain'?'原 Key 仍为未加密保存；设置密码并点击下方按钮后，加密才会生效。':state.mode==='encrypted'?'已加密保存，刷新后需用本机保存密码解锁。':'设置密码并点击下方按钮，完成加密保存。';commit.textContent=mode.value==='plain'?'完成':'加密保存并使用';}
+ function describeMode(){encrypted.hidden=mode.value!=='encrypted';const state=savedKeyState();status.textContent=mode.value==='plain'?'填写后自动保存。当前为未加密保存，请在自己信任的设备上使用。':state.mode==='plain'?'原 Key 仍为未加密保存；设置密码并点击下方按钮后，加密才会生效。':state.mode==='encrypted'?'已加密保存，刷新后需用本机保存密码解锁。':'设置密码并点击下方按钮，完成加密保存。';commit.textContent=mode.value==='plain'?'完成':'加密保存并使用';}
  function autoSave(){if(mode.value!=='plain')return true;const candidate=k.value.trim();try{key=savePlainKey(localStorage,candidate);status.textContent=key?'已自动保存在当前浏览器（未加密），刷新后无需重填。':'保存的 Key 已清除。';$('#connection').textContent=key?'Key 已配置':'未配置 API';return true;}catch(e){key=candidate;status.textContent='无法自动保存，当前仅在本页使用：'+e.message;return false;}}
  k.addEventListener('input',autoSave);k.addEventListener('change',autoSave);
  mode.onchange=()=>{describeMode();if(mode.value==='plain'&&k.value.trim())autoSave();};
