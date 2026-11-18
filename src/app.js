@@ -38,11 +38,53 @@ function toast(t){($('#dialog').open?$('#dialog'):document.body).append($('#toas
 async function initDB(){db=await new Promise((resolve,reject)=>{const r=indexedDB.open('xuye-local-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const data=await new Promise((resolve,reject)=>{const r=db.transaction('state').objectStore('state').get('chats');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});chats=Array.isArray(data)?data:[];current=chats[0]?.id||null;render();}
 function persist(){return new Promise((resolve,reject)=>{const tx=db.transaction('state','readwrite');tx.objectStore('state').put(chats,'chats');tx.oncomplete=resolve;tx.onerror=()=>reject(Error('本地保存失败，请立即导出备份。浏览器可能没有足够空间。'));});}
 async function save(){try{await persist();}catch(e){toast(e.message);throw e;}}
-function modal(title){mediaUI?.cleanup();closeSidebar();$('#dialogTitle').textContent=title;$('#dialogBody').replaceChildren();if(!$('#dialog').open)$('#dialog').showModal();$('#dialog').scrollTop=0;return $('#dialogBody');}
+function modal(title){
+ mediaUI?.cleanup();closeSidebar();
+ const dialog=$('#dialog'),heading=$('#dialogTitle'),body=$('#dialogBody'),back=$('#closeDialog');
+ heading.textContent=title;
+ back.textContent=dialogReturn?'‹ 返回':'×';
+ back.setAttribute('aria-label',dialogReturn?'返回上一级':'关闭');
+ back.classList.toggle('dialog-back',!!dialogReturn);
+ body.replaceChildren();
+ if(!dialog.open)dialog.showModal();
+ heading.focus({preventScroll:true});
+ body.scrollTop=0;
+ return body;
+}
+function openChild(open,parent){
+ const previous=dialogReturn;
+ dialogReturn=()=>{dialogReturn=previous;parent();};
+ open();
+}
 function close(){$('#dialog').close();}
 function button(parent,text,fn,cls=''){const b=el('button',text,cls);b.type='button';b.onclick=async()=>{try{await fn();}catch(e){toast(e.message||'操作失败');}};parent.append(b);return b;}
 function field(parent,label,type='text',value=''){const id='f'+crypto.randomUUID();const l=el('label',label);l.htmlFor=id;const i=el(type==='textarea'?'textarea':'input');i.id=id;if(type!=='textarea')i.type=type;i.value=value;parent.append(l,i);return i;}
 function note(parent,text,cls='subtle'){parent.append(el('p',text,cls));}
+function settingSection(parent,title,description){
+ const section=el('section',undefined,'setting-section');
+ section.append(el('h3',title));
+ if(description)note(section,description);
+ parent.append(section);
+ return section;
+}
+function settingActions(parent){
+ const row=el('div',undefined,'row setting-actions');parent.append(row);return row;
+}
+function settingDetails(parent,title){
+ const details=el('details',undefined,'setting-details');details.append(el('summary',title));parent.append(details);return details;
+}
+function settingStatus(parent,text=''){
+ const status=el('div',text,'setting-status');status.setAttribute('role','status');parent.append(status);return status;
+}
+function filePicker(parent,label,accept){
+ const picker=el('label',undefined,'file-picker');
+ const input=el('input',undefined,'file-picker-input');input.type='file';input.accept=accept;
+ input.setAttribute('aria-label',label);
+ const name=el('span','尚未选择文件','file-picker-name');
+ input.addEventListener('change',()=>{name.textContent=input.files[0]?.name||'尚未选择文件';});
+ picker.append(input,el('strong',label),name);parent.append(picker);
+ return {input,clear(){input.value='';name.textContent='尚未选择文件';}};
+}
 function setBusy(v){busy=v;$('#cancelEdit').disabled=v;$('#sendBtn').hidden=v;$('#stopBtn').hidden=!v;$('#prompt').disabled=v;for(const id of ['newChat','deleteBtn','memoryBtn','importBtn','backupBtn','settingsBtn','manageBtn','demoBtn','welcomeImport','libraryBtn','fileBtn','imageBtn','voiceBtn','webBtn','thinkingBtn'])$('#'+id).disabled=v;}
 function render(){
  document.querySelector('.conversation-menu')?.remove();mediaUI?.stopSpeech();
@@ -88,39 +130,186 @@ function conversationMenu(c,anchor){
 async function makeChat(){mediaUI?.resetDraft();const c=newChat();chats.unshift(c);current=c.id;await save();render();$('#prompt').focus();}
 function preview(){mediaUI.assertReady();const c=chat()||newChat(),options=mediaUI.options(),b=modal('本次会发送什么');note(b,'以下消息将从浏览器直接发送至 DeepSeek。图片数据在此用占位说明代替；实际请求包含图片。','notice');note(b,options.thinkingEnabled?'深度思考已开启，本次最多 8192 输出 token（含思考），可能增加等待时间与用量。':'深度思考关闭，本次最多 4096 输出 token。');note(b,options.webEnabled?'联网已开启：模型可搜索、读取网页，可能额外计费。':'联网关闭：本次不启用搜索或读取网页工具。');if(options.pendingDocuments.length)note(b,'待上传文件：'+options.pendingDocuments.map(d=>d.name).join('、')+'。点击发送后先直传 DeepSeek，再将返回的文件引用加入本条消息；解析可能单独计费。','notice');const msgs=contextFor(previewChat(c),$('#prompt').value.trim(),options);b.append(el('pre',JSON.stringify(previewMessages(msgs),null,2)));note(b,'发送范围：当前消息 + 最近最多 20 条完整消息（历史最多 4 万字符，含本轮最多 8 张图片）'+(c.memoryEnabled&&c.memory?' + 当前记忆卡':'')+'。上传文档按完整内容参与上下文，不计入上述 4 万字符；文档引用最多 20 个。这不是全部历史；思考与联网同时开启时，回传的历史思考也计入字符上限。官方 ZIP 中的附件与其他分支不会自动导入。');}
 
-function managePanel(){dialogReturn=null;const b=modal('设置与管理');$('#closeDialog').setAttribute('aria-label','关闭');note(b,'连接、外观和数据管理都在这里。');const menu=el('div',undefined,'manage-menu');b.append(menu);for(const [label,open]of [['连接与 API 设置',settings],['颜色与阅读',appearancePanel],['文件、图片、语音与联网',()=>mediaUI.settings()],['用量与余额',usagePanel],['备份与恢复',backup],['高级功能 · 授权',licensePanel],['使用指南与数据说明',guide]])button(menu,label,()=>{open();dialogReturn=managePanel;$('#closeDialog').setAttribute('aria-label','返回设置与管理');});}
+function managePanel(){
+ dialogReturn=null;
+ const b=modal('设置与管理');
+ const groups=[
+  ['连接与使用',[
+   ['连接与 API 设置','管理本机保存的 DeepSeek API Key',settings],
+   ['用量与余额','查看本机用量或查询官方余额',usagePanel],
+   ['文件、图片、语音与联网','设置朗读声音和文档读取方式',()=>mediaUI.settings()],
+  ]],
+  ['外观与数据',[
+   ['颜色与阅读','调节主题、字号和阅读行距',appearancePanel],
+   ['备份与恢复','导出记录，或从文件恢复对话',backup],
+   ['高级功能 · 授权','查看状态或导入授权',licensePanel],
+  ]],
+ ];
+ for(const [label,items] of groups){
+  const group=el('section',undefined,'manage-group');
+  group.append(el('h3',label));
+  const menu=el('div',undefined,'manage-menu');
+  for(const [title,description,open] of items){
+   const item=button(menu,'',()=>openChild(open,managePanel));
+   item.setAttribute('aria-label',title);
+   const copy=el('span',undefined,'manage-label');
+   copy.append(el('strong',title),el('small',description));
+   const chevron=el('span','›','manage-chevron');chevron.setAttribute('aria-hidden','true');
+   item.append(copy,chevron);
+  }
+  group.append(menu);b.append(group);
+ }
+ button(b,'使用指南与数据说明',()=>openChild(guide,managePanel),'settings-help');
+}
+async function requestDeepSeek(path,apiKey){
+ const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),15000);
+ try{
+  const response=await fetch('https://api.deepseek.com'+path,{headers:{Authorization:'Bearer '+apiKey},signal:ctl.signal});
+  if(!response.ok)throw Error(apiError(response.status));
+  return await response.json();
+ }catch(error){
+  if(error.name==='AbortError')throw Error('请求超时，请稍后重试。');
+  if(error instanceof TypeError)throw Error('无法连接 DeepSeek，请检查网络后重试。');
+  throw error;
+ }finally{clearTimeout(timer);}
+}
+function platformLink(parent,text){
+ const link=el('a',text);link.href='https://platform.deepseek.com/';link.target='_blank';link.rel='noopener noreferrer';parent.append(link);
+}
 function usagePanel(){
  const b=modal('用量与余额');
- let input=0,output=0,count=0;for(const c of chats)for(const m of c.messages||[]){const u=m.usage;if(u&&Number.isFinite(u.prompt_tokens)&&Number.isFinite(u.completion_tokens)&&u.prompt_tokens>=0&&u.completion_tokens>=0){input+=u.prompt_tokens;output+=u.completion_tokens;count++;}}
- note(b,`本设备当前保存的用量：${count} 次有记录的回复，输入 ${input.toLocaleString()} / 输出 ${output.toLocaleString()} token。`,'test-result');note(b,'这是聊天文字与图片的 token 记录，不包含语音识别、朗读、搜索和网页读取的工具费用，也并非账户总用量；导入、删除、停止生成或未返回用量的请求可能不计入，不能据此计算账单。');
- const status=el('p','点击下方按钮查询当前账号余额。','test-result');status.setAttribute('role','status');status.setAttribute('aria-live','polite');b.append(status);
- const actions=el('div',undefined,'row');b.append(actions);
- button(actions,'查询官方余额',async()=>{if(!key){status.textContent='请先在「连接与 API 设置」中填写并使用 Key。';return;}status.textContent='正在查询官方余额…';const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),15000);try{const r=await fetch('https://api.deepseek.com/user/balance',{headers:{Authorization:'Bearer '+key},signal:ctl.signal});if(!r.ok)throw Error(apiError(r.status));const data=await r.json();if(!Array.isArray(data.balance_infos)||!data.balance_infos.length)throw Error('官方未返回可显示的余额信息。');status.textContent=data.balance_infos.map(x=>`${String(x.currency||'货币')}：可用 ${String(x.total_balance??'—')}（赠金 ${String(x.granted_balance??'—')}，充值 ${String(x.topped_up_balance??'—')}）`).join('；');}catch(e){status.textContent=e.name==='AbortError'?'查询超时，请检查网络。':e.message==='Failed to fetch'?'无法直连官方余额接口，请检查网络或浏览器跨域限制。':e.message;}finally{clearTimeout(timer);}},'primary');
- const billing=el('p',undefined,'subtle');billing.append(document.createTextNode('需要查看详细账单？'));const a=el('a','打开 DeepSeek 开放平台（新标签页）');a.href='https://platform.deepseek.com/';a.target='_blank';a.rel='noopener noreferrer';billing.append(a);b.append(billing);
+ let input=0,output=0,count=0;
+ for(const c of chats)for(const m of c.messages||[]){
+  const u=m.usage;
+  if(u&&Number.isFinite(u.prompt_tokens)&&Number.isFinite(u.completion_tokens)&&u.prompt_tokens>=0&&u.completion_tokens>=0){
+   input+=u.prompt_tokens;output+=u.completion_tokens;count++;
+  }
+ }
+ const balance=settingSection(b,'DeepSeek 账户余额');
+ const status=settingStatus(balance,'查询后，余额会显示在这里。');
+ const actions=settingActions(balance);
+ const query=button(actions,'查询官方余额',async()=>{
+  if(!key){status.textContent='请先在「连接与 API 设置」中配置或解锁 Key。';return;}
+  query.disabled=true;status.textContent='正在查询…';
+  try{
+   const data=await requestDeepSeek('/user/balance',key);
+   if(!Array.isArray(data.balance_infos)||!data.balance_infos.length)throw Error('官方未返回余额信息。');
+   const list=el('dl',undefined,'usage-stats');
+   for(const item of data.balance_infos){
+    const group=el('div');
+    group.append(el('dt',String(item.currency||'可用余额')),el('dd',String(item.total_balance??'—')));
+    list.append(group);
+   }
+   status.replaceChildren(list);
+   const breakdown=data.balance_infos.map(item=>
+    [item.currency,item.granted_balance==null?'':'赠金 '+item.granted_balance,item.topped_up_balance==null?'':'充值 '+item.topped_up_balance].filter(Boolean).join(' · ')
+   ).filter(Boolean).join('；');
+   if(breakdown)note(status,breakdown);
+  }catch(error){status.textContent=error.message;}
+  finally{query.disabled=false;}
+ },'primary');
+ const bill=el('p',undefined,'subtle');platformLink(bill,'在 DeepSeek 开放平台查看详细账单 ↗');balance.append(bill);
+ const local=settingSection(b,'本机用量','仅统计当前设备已保存的文字与图片回复。');
+ const stats=el('dl',undefined,'usage-stats');
+ for(const [label,value] of [['有记录的回复',count],['输入 token',input],['输出 token',output]]){
+  const item=el('div');item.append(el('dt',label),el('dd',value.toLocaleString()));stats.append(item);
+ }
+ local.append(stats);
+ note(settingDetails(local,'统计范围'),'导入、删除、停止生成或未返回用量的请求可能影响统计。语音、搜索和网页读取等工具费用以官方账单为准。');
 }
 function settings(){
- const b=modal('连接你的 DeepSeek'),saved=savedKeyState();
- note(b,'Key 默认自动保存在当前浏览器，刷新后继续使用。你也可以选择密码加密。聊天备份不包含 Key。','notice');
- const k=field(b,'API Key','password',key);k.autocomplete='off';k.spellcheck=false;k.maxLength=2048;
- const controls=el('div',undefined,'row');b.append(controls);button(controls,'显示 / 隐藏',()=>k.type=k.type==='password'?'text':'password');button(controls,'清除当前及保存的 Key',()=>{clearSavedKey(localStorage);key='';k.value='';render();close();toast('当前及本机保存的 Key 已移除');});
- const label=el('label','Key 保存方式'),mode=el('select');mode.id='keySaveMode';label.htmlFor=mode.id;
- for(const [value,text]of [['plain','自动保存（本机未加密）'],['encrypted','密码加密保存']]){const option=el('option',text);option.value=value;mode.append(option);}mode.value=saved.mode==='encrypted'?'encrypted':'plain';b.append(label,mode);
- const status=el('p','','test-result');status.setAttribute('role','status');status.setAttribute('aria-live','polite');b.append(status);
- const encrypted=el('div');b.append(encrypted);
- if(saved.mode==='encrypted'){const unlockPassword=field(encrypted,'输入本机保存密码','password');unlockPassword.autocomplete='off';const unlockRow=el('div',undefined,'row');encrypted.append(unlockRow);
-  const unlock=button(unlockRow,'解锁已保存的 Key',async()=>{unlock.disabled=true;try{const state=savedKeyState();if(state.mode!=='encrypted')throw Error('当前没有加密保存的 Key，请检查保存方式');key=await openKey(state.vault,unlockPassword.value);unlockPassword.value='';k.value='';render();close();toast('Key 已解锁，可在当前页面使用');}finally{unlock.disabled=false;}},'primary');
+ const b=modal('连接与 API 设置'),saved=savedKeyState();
+ if(saved.mode==='encrypted'&&!key){
+  const locked=settingSection(b,'解锁已保存的 Key','输入之前设置的本机密码。');
+  const password=field(locked,'本机保存密码','password');password.autocomplete='current-password';
+  const feedback=settingStatus(locked);
+  const unlock=button(settingActions(locked),'解锁',async()=>{
+   unlock.disabled=true;
+   try{
+    const state=savedKeyState();
+    if(state.mode!=='encrypted')throw Error('本机没有加密保存的 Key。');
+    key=await openKey(state.vault,password.value);password.value='';
+    render();if(feedback.isConnected){settings();toast('Key 已解锁');}
+   }catch(error){feedback.textContent=error.message;}
+   finally{unlock.disabled=false;}
+  },'primary');
  }
- note(encrypted,'设置一个新的本机保存密码，用它保护 API Key，与 DeepSeek 登录密码无关。完成加密后，刷新需输入此密码解锁；密码不会保存，也不能找回。忘记后可清除已保存的 Key 并重新填写，不影响聊天。');
- const password=field(encrypted,'设置本机保存密码（至少 12 个字符）','password'),again=field(encrypted,'再次输入本机保存密码','password');password.autocomplete=again.autocomplete='new-password';
- function describeMode(){encrypted.hidden=mode.value!=='encrypted';const state=savedKeyState();status.textContent=mode.value==='plain'?'填写后自动保存。当前为未加密保存，请在自己信任的设备上使用。':state.mode==='plain'?'原 Key 仍为未加密保存；设置密码并点击下方按钮后，加密才会生效。':state.mode==='encrypted'?'已加密保存，刷新后需用本机保存密码解锁。':'设置密码并点击下方按钮，完成加密保存。';commit.textContent=mode.value==='plain'?'完成':'加密保存并使用';}
- function autoSave(){if(mode.value!=='plain')return true;const candidate=k.value.trim();try{key=savePlainKey(localStorage,candidate);status.textContent=key?'已自动保存在当前浏览器（未加密），刷新后无需重填。':'保存的 Key 已清除。';$('#connection').textContent=key?'Key 已配置':'未配置 API';return true;}catch(e){key=candidate;status.textContent='无法自动保存，当前仅在本页使用：'+e.message;return false;}}
+ const connection=settingSection(b,'DeepSeek API Key','Key 保存在当前浏览器，聊天备份不包含它。');
+ const k=field(connection,'API Key','password',key);k.autocomplete='off';k.spellcheck=false;k.maxLength=2048;k.placeholder=saved.mode==='encrypted'&&!key?'或在此填写新的 Key':'粘贴你的 DeepSeek API Key';
+ const controls=settingActions(connection);
+ const reveal=button(controls,'显示 Key',()=>{
+  const visible=k.type==='password';
+  k.type=visible?'text':'password';reveal.textContent=visible?'隐藏 Key':'显示 Key';reveal.setAttribute('aria-pressed',String(visible));
+ },'secondary');
+ reveal.setAttribute('aria-pressed','false');
+ const result=settingStatus(connection);
+ const test=button(controls,'测试连接',async()=>{
+  const candidate=k.value.trim()||key;
+  if(!candidate){result.textContent='请先填写或解锁 Key。';return;}
+  test.disabled=true;result.textContent='正在测试连接…';
+  try{await requestDeepSeek('/models',candidate);result.textContent='连接成功，可以开始聊天。';}
+  catch(error){result.textContent=error.message;}
+  finally{test.disabled=false;}
+ },'secondary');
+ const help=el('p',undefined,'subtle');platformLink(help,'到 DeepSeek 开放平台管理 API Key ↗');connection.append(help);
+ const storage=settingSection(b,'本机保存');
+ const label=el('label','保存方式'),mode=el('select');mode.id='keySaveMode';label.htmlFor=mode.id;
+ for(const [value,text] of [['plain','自动保存'],['encrypted','密码加密保存']]){
+  const option=el('option',text);option.value=value;mode.append(option);
+ }
+ mode.value=saved.mode==='encrypted'?'encrypted':'plain';storage.append(label,mode);
+ const status=settingStatus(storage);
+ const encrypted=el('div');storage.append(encrypted);
+ const password=field(encrypted,'新密码（至少 12 个字符）','password'),again=field(encrypted,'再次输入新密码','password');
+ password.autocomplete=again.autocomplete='new-password';
+ note(encrypted,'刷新后用此密码解锁。请妥善保管密码。');
+ const actions=settingActions(b);
+ function describeMode(){
+  encrypted.hidden=mode.value!=='encrypted';
+  const actual=savedKeyState().mode;
+  commit.textContent=mode.value==='plain'?'完成保存':'加密保存';
+  status.textContent=mode.value==='plain'
+   ? actual==='encrypted'?'已保存的 Key 仍受密码保护。确认后才会切换为未加密保存。':'填写后自动保存在当前浏览器，刷新后继续使用。'
+   : actual==='encrypted'?'当前已加密保存。可以设置新密码来更新 Key。':'设置密码后点击「加密保存」，加密才会生效。';
+ }
+ function autoSave(){
+  const candidate=k.value.trim();
+  if(mode.value!=='plain'||savedKeyState().mode==='encrypted'||!candidate)return true;
+  try{key=savePlainKey(localStorage,candidate);status.textContent='已自动保存到当前浏览器（未加密）。';$('#connection').textContent='Key 已配置';return true;}
+  catch(error){key=candidate;status.textContent='只能在本页使用，未能保存：'+error.message;return false;}
+ }
+ const commit=button(actions,'完成保存',async()=>{
+  const candidate=k.value.trim()||key;
+  if(mode.value==='plain'){
+   if(savedKeyState().mode==='encrypted'){
+    if(!candidate){status.textContent='请先解锁已保存的 Key，或填写新的 Key。';return;}
+    if(!confirm('确认改为自动保存？保存的 API Key 将不再受密码保护。'))return;
+    key=savePlainKey(localStorage,candidate);
+   }else if(!autoSave())return;
+   render();close();return;
+  }
+  if(!candidate){status.textContent='请先填写或解锁 Key。';return;}
+  if(password.value!==again.value){status.textContent='两次密码不一致。';return;}
+  commit.disabled=true;
+  try{
+   const vault=await sealKey(candidate,password.value);
+   saveEncryptedKey(localStorage,vault);key=candidate;k.value=password.value=again.value='';
+   render();if(commit.isConnected){close();toast('Key 已加密保存');}
+  }catch(error){status.textContent=error.message;}
+  finally{commit.disabled=false;}
+ },'primary');
+ if(saved.mode!=='none'||key){
+  const maintenance=settingDetails(storage,'移除已保存的 Key');
+  note(maintenance,'移除后需要重新填写 Key 才能继续调用 DeepSeek。');
+  button(settingActions(maintenance),'移除本机 Key',()=>{
+   if(!confirm('移除此浏览器保存的 API Key？'))return;
+   clearSavedKey(localStorage);key='';render();settings();toast('本机 Key 已移除');
+  },'danger');
+ }
  k.addEventListener('input',autoSave);k.addEventListener('change',autoSave);
- mode.onchange=()=>{describeMode();if(mode.value==='plain'&&k.value.trim())autoSave();};
- const actions=el('div',undefined,'row');b.append(actions);
- const commit=button(actions,'完成',async()=>{if(mode.value==='plain'){if(!autoSave())throw Error('未能保存在浏览器中；此 Key 仅在当前页面可用。');render();close();return;}if(password.value!==again.value)throw Error('两次密码不一致');commit.disabled=true;try{const candidate=k.value.trim(),vault=await sealKey(candidate,password.value);saveEncryptedKey(localStorage,vault);key=candidate;k.value=password.value=again.value='';render();close();toast('Key 已加密保存，刷新后用本机保存密码解锁');}finally{commit.disabled=false;}},'primary');
+ mode.onchange=()=>{describeMode();autoSave();};
  describeMode();
- const result=el('p','连接测试只请求官方模型列表，不生成回复。','test-result');result.setAttribute('role','status');result.setAttribute('aria-live','polite');b.append(result);button(b,'测试连接',async()=>{if(!k.value.trim()){result.textContent='请先填写 Key，再测试连接。';return;}result.textContent='正在连接官方 API…';const ctl=new AbortController();const timer=setTimeout(()=>ctl.abort(),15000);try{const r=await fetch('https://api.deepseek.com/models',{headers:{Authorization:'Bearer '+k.value.trim()},signal:ctl.signal});if(!r.ok)throw Error(apiError(r.status));await r.json();result.textContent='连接成功。可以使用此 Key 聊天。';}catch(e){result.textContent=e.name==='AbortError'?'连接超时，请检查网络。':e.message==='Failed to fetch'?'未能直连：请检查网络或浏览器跨域限制。本工具不会自动转发 Key。':e.message;}finally{clearTimeout(timer);}});
- const a=el('a','打开 DeepSeek 官方开放平台');a.href='https://platform.deepseek.com/';a.target='_blank';a.rel='noopener noreferrer';b.append(a);note(b,'固定连接官方 API，使用 deepseek-flash，可切换深度思考，关闭时最多 4096、开启时最多 8192 输出 token（含思考）。费用以 DeepSeek 官方账单为准。');}
+}
 function apiError(s){return ({401:'Key 无效或已撤销，请检查配置。',402:'API 账户余额不足，请前往官方平台核实。',429:'请求过于频繁或触及 API 限制，请稍后重试。',400:'API 参数或上下文不被接受，请减少内容后重试。',403:'API 拒绝访问，请检查账号权限。'}[s]||`官方 API 返回 HTTP ${s}，请稍后重试。`);}
 async function send(event){event?.preventDefault();if(busy)return;mediaUI.assertReady();const text=$('#prompt').value.trim(),options=mediaUI.options();if(!text&&!options.images.length&&!options.documents.length&&!options.pendingDocuments.length)return;if(!key){settings();return;}
  setBusy(true);controller=new AbortController();let c,oldTitle,payload;
@@ -141,10 +330,10 @@ async function memory(){if(!chat())await makeChat();const c=chat(),b=modal('这�
 function importer(){
  const b=modal('带来一段对话');note(b,'直接选择 DeepSeek 导出的 ZIP，也可以选择单个 JSON、TXT、MD 或拾语 · Afterword 备份。文件只在本设备解析，不会因导入调用 API。','notice');
  note(b,'ZIP 中仅导入当前分支的文字问答；图片、附件、工具调用、思考过程及其他分支不会导入。请保留原始导出包。ZIP 最大 64 MB，最多 500 段会话。');
- const file=field(b,'选择文件','file');file.accept='.zip,.txt,.md,.json';const results=el('div');b.append(results);let generation=0;
+ const {input:file}=filePicker(b,'选择文件','.zip,.txt,.md,.json');const results=el('div');b.append(results);let generation=0;
  file.onchange=async()=>{const run=++generation;try{const f=file.files[0];if(!f)return;results.replaceChildren();note(results,'正在本地读取，请稍候…');let candidates=[],warnings=[];
  if(/\.zip$/i.test(f.name)){if(f.size>64*1024*1024)throw Error('ZIP 超过 64 MB，请先解压并分批导入 JSON');const archive=await readDeepSeekZip(await f.arrayBuffer());warnings=archive.warnings;for(const item of archive.sessions){try{candidates.push(...importText(item.text,item.name.split('/').pop()));}catch(e){warnings.push(`${item.name}：${e.message}`);}if(candidates.length>500)throw Error('最多一次导入 500 段对话');}}
- else{if(f.size>128*1024*1024)throw Error('单个文件超过 128 MB，请分批备份或导入');const raw=await f.text();let json;try{json=JSON.parse(raw);}catch{}if(json?.format==='xuye-encrypted'){if(run===generation&&file.isConnected)restorePrompt(raw);return;}candidates=importText(raw,f.name);}
+ else{if(f.size>128*1024*1024)throw Error('单个文件超过 128 MB，请分批备份或导入');const raw=await f.text();let json;try{json=JSON.parse(raw);}catch{}if(json?.format==='xuye-encrypted'){if(run===generation&&file.isConnected)openChild(()=>restorePrompt(raw),importer);return;}candidates=importText(raw,f.name);}
  if(run!==generation||!file.isConnected)return;results.replaceChildren();note(results,`识别到 ${candidates.length} 段对话，${warnings.length} 个文件未能读取。选择后新增导入，不覆盖已有记录。`,'test-result');
  if(warnings.length){const d=el('details'),summary=el('summary','查看未能读取的文件');d.append(summary);for(const warning of warnings)note(d,warning,'error');results.append(d);}
  const checked=[];for(const c of candidates){const l=el('label',undefined,'importitem'),i=el('input');i.type='checkbox';i.checked=true;l.append(i,document.createTextNode(`${c.title} · ${c.messages.length} 条`));results.append(l);checked.push({i,c});}
@@ -152,64 +341,195 @@ function importer(){
  }catch(e){if(run===generation&&file.isConnected)results.replaceChildren(el('p',e.message,'error'));}};
 }
 function download(name,text){const url=URL.createObjectURL(new Blob([text],{type:'application/json'})),a=el('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-function backup(){const b=modal('备份与恢复');note(b,'记录只存在此浏览器的当前站点中。清理浏览器、更换地址或更换设备可能导致记录不可访问。备份不含 API Key 或原始文档，仅保留文档引用。','notice');const pwd=field(b,'加密备份密码（至少 10 个字符）','password');pwd.autocomplete='new-password';const again=field(b,'再次输入密码','password');again.autocomplete='new-password';button(b,'导出加密备份',async()=>{if(!chats.length)throw Error('目前没有可备份的对话');if(pwd.value!==again.value)throw Error('两次密码不一致');const obj=await encryptBackup(chats,pwd.value);download('afterword-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(obj));pwd.value='';again.value='';toast('已请求浏览器下载备份，请检查下载文件');},'primary');note(b,'使用 AES-GCM 加密。密码丢失无法由我们恢复。浏览器内的聊天数据库本身未进行应用级加密，请保护你的设备。');const row=el('div',undefined,'row');b.append(row);button(row,'导入 / 恢复备份',importer);button(row,'导出明文备份',()=>{if(!confirm('明文备份包含全部聊天正文和记忆。确认导出到本机？'))return;download('afterword-plaintext.json',JSON.stringify({format:'xuye-backup',version:2,chats},null,2));});button(row,'清除本地全部数据',async()=>{if(!confirm('这将删除本设备此站点的所有对话、记忆、主题设置、本地授权和当前 Key。不会删除已上传到 DeepSeek 的文件，文件最长 30 天过期；可先在消息附件中删除官方文件。请先备份。确定删除？'))return;const previous=chats;chats=[];try{await save();}catch(e){chats=previous;throw e;}current=null;key='';licenseInfo=null;fullSearch=false;mediaUI.resetDraft();for(const item of ['license','appearance','voice','documentMode','key-vault','key-storage'])localStorage.removeItem('xuye-'+item);applyAppearance(defaultAppearance);close();render();toast('本地对话、记忆、设置和授权已清除；已下载文件不受影响');},'danger');}
-function restorePrompt(raw){const b=modal('恢复加密备份');note(b,'恢复将新增导入，不覆盖已有对话。备份不包含 API Key。');const pwd=field(b,'备份密码','password');button(b,'解密并导入',async()=>{const text=await decryptBackup(JSON.parse(raw),pwd.value);const imported=importText(text,'backup.json');const previous=[...chats];chats.unshift(...imported);try{await save();}catch(e){chats=previous;throw e;}current=imported[0]?.id||current;mediaUI.resetDraft();pwd.value='';close();render();toast(`已恢复 ${imported.length} 段对话`);},'primary');}
-function guide(){const b=modal('使用指南与数据说明');for(const [title,text] of [
- ['01 · 先体验','点击「先看看示例」无需 Key 即可检查对话、记忆卡和备份；示例完全是虚构的本地内容。'],
- ['02 · 接入 API','到 DeepSeek 官方开放平台注册、了解价格、充值并创建 Key。打开「连接与设置」，在你自己的页面填写 Key。Key 默认自动保存在当前浏览器并在刷新后恢复；也可选择密码加密，刷新后用本机保存密码解锁。'],
- ['03 · 导入与续聊','导入支持的记录，在「记忆卡」手动补充重要内容。发送前可查看实际请求内容。此版本只发送最近最多 20 条完整消息，历史总长度最多 4 万字符；更早内容需整理进记忆卡。'],
- ['04 · 备份','记录保存在此浏览器此地址的 IndexedDB，未作应用级加密。导出可选择加密备份，Key 不在备份中。请保留密码并测试恢复。'],
- ['数据流','静态服务器仅向浏览器提供应用文件。API 请求从浏览器直连 api.deepseek.com，包含 Key、当前消息及所选上下文；DeepSeek 按其条款处理这些数据。应用无分析统计、无云同步、无自动网络请求。'],
- ['边界','拾语 · Afterword 是第三方测试工具，与 DeepSeek 无隶属或代理关系。API 单独计费；开源不等于已通过独立安全审计。本版支持图片输入、按需联网、语音转写与回复朗读；不含图片生成、支付和自动记忆总结。续聊不能保证恢复原来的风格和全部记忆。'],
- ['遇到问题','不要提交真实 Key 或完整私密聊天。只提供错误类型、浏览器版本和脱敏样例。出现连接失败时，本工具不会自动改用代理。']]){b.append(el('h3',title));note(b,text);}}
+function backup(){
+ const b=modal('备份与恢复');
+ const restore=settingSection(b,'从文件恢复','恢复会新增对话，已有记录会保留。');
+ button(settingActions(restore),'导入 / 恢复备份',()=>openChild(importer,backup),'primary');
+ const exportPanel=settingSection(b,'导出备份','包含对话、记忆和模板，不含 API Key 或附件原件。');
+ const encrypted=settingDetails(exportPanel,'导出加密备份');
+ note(encrypted,'请保管备份密码。日后恢复时必须输入。');
+ const pwd=field(encrypted,'备份密码（至少 10 个字符）','password');
+ const again=field(encrypted,'再次输入密码','password');
+ pwd.autocomplete=again.autocomplete='new-password';
+ const status=settingStatus(encrypted);
+ const encrypt=button(settingActions(encrypted),'下载加密备份',async()=>{
+  if(!chats.length){status.textContent='目前没有可备份的对话。';return;}
+  if(pwd.value!==again.value){status.textContent='两次密码不一致。';return;}
+  encrypt.disabled=true;
+  try{
+   const data=await encryptBackup(chats,pwd.value);
+   download('afterword-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(data));
+   pwd.value=again.value='';status.textContent='已请求下载，请查看浏览器的下载记录。';
+  }catch(error){status.textContent=error.message;}
+  finally{encrypt.disabled=false;}
+ },'primary');
+ button(settingActions(exportPanel),'导出明文备份',()=>{
+  if(!chats.length){toast('目前没有可备份的对话。');return;}
+  if(!confirm('明文备份包含全部聊天正文和记忆。确认导出到本机？'))return;
+  download('afterword-plaintext.json',JSON.stringify({format:'xuye-backup',version:2,chats},null,2));
+ },'secondary');
+ const danger=settingDetails(b,'清除本机数据');
+ note(danger,'会删除此浏览器在当前站点的对话、设置、授权和 Key。建议先备份。');
+ button(settingActions(danger),'清除本地全部数据',async()=>{
+  if(!confirm('确定删除当前站点保存在此浏览器的对话、设置、授权和 API Key？已上传给 DeepSeek 的文件需另行管理。'))return;
+  const previous=chats;chats=[];
+  try{await save();}catch(error){chats=previous;throw error;}
+  current=null;key='';++licenseRevision;licenseInfo=null;licenseNotice='';fullSearch=false;mediaUI.resetDraft();
+  for(const item of ['license','appearance','voice','documentMode','key-vault','key-storage'])localStorage.removeItem('xuye-'+item);
+  applyAppearance(defaultAppearance);close();render();toast('本机数据已清除');
+ },'danger');
+}
+function restorePrompt(raw){
+ const b=modal('恢复加密备份');
+ note(b,'恢复会新增对话，已有记录会保留。');
+ const pwd=field(b,'备份密码','password');pwd.autocomplete='off';
+ const status=settingStatus(b);
+ const restore=button(settingActions(b),'解密并导入',async()=>{
+  restore.disabled=true;
+  try{
+   const text=await decryptBackup(JSON.parse(raw),pwd.value);
+   const imported=importText(text,'backup.json');
+   const previous=[...chats];chats.unshift(...imported);
+   try{await save();}catch(error){chats=previous;throw error;}
+   current=imported[0]?.id||current;mediaUI.resetDraft();pwd.value='';if(restore.isConnected)close();render();toast(`已恢复 ${imported.length} 段对话`);
+  }catch(error){status.textContent=error.message;}
+  finally{restore.disabled=false;}
+ },'primary');
+}
+function guide(){
+ const b=modal('使用指南与数据说明');
+ const start=settingSection(b,'从一段对话开始');
+ const steps=el('ol',undefined,'guide-steps');
+ for(const [label,copy] of [
+  ['体验示例','无需 API Key，可以先看看记忆卡和本地保存。'],
+  ['导入记录','选择 DeepSeek 导出的 ZIP，勾选要带来的对话。ZIP 只读取当前分支的文字。'],
+  ['配置并续聊','在「连接与 API 设置」填写 Key。通过记忆卡补充重要设定，发送前可预览消息范围。']
+ ]){
+  const step=el('li');step.append(el('strong',label),el('span',copy));steps.append(step);
+ }
+ start.append(steps);
+ for(const [label,copy] of [
+  ['记录与备份','对话存于当前浏览器和站点。换设备或清理网站数据前请先备份。备份不含 API Key 或原始附件。'],
+  ['发送给 DeepSeek 的内容','聊天、文件、图片和语音按你发起的操作直连官方 API，费用以官方账单为准。每次随请求带上有限的近期对话和已启用的记忆卡，不会自动重建旧对话的全部记忆。'],
+  ['授权校验',LICENSE_VERIFY_URL?'商用授权通过独立授权服务校验。请求只发送授权文件。':'授权在此浏览器离线校验。'],
+  ['遇到问题','报告问题时，请提供错误类型、浏览器版本和脱敏样例，避免提交私密聊天或 API Key。']
+ ])note(settingDetails(b,label),copy);
+}
 $('#cancelEdit').onclick=()=>{if(busy)return;finishEdit(true);render();$('#prompt').focus();};
 $('#closeDialog').onclick=close;$('#dialog').addEventListener('close',()=>{const returnTo=dialogReturn;dialogReturn=null;mediaUI?.cleanup();document.body.append($('#toast'));$('#dialogBody').replaceChildren();$('#closeDialog').setAttribute('aria-label','关闭');if(returnTo)queueMicrotask(returnTo);});$('#newChat').onclick=()=>{closeSidebar();makeChat().catch(e=>toast(e.message));};$('#search').oninput=render;$('#settingsBtn').onclick=settings;$('#memoryBtn').onclick=()=>memory().catch(e=>toast(e.message));$('#previewBtn').onclick=preview;$('#importBtn').onclick=importer;$('#welcomeImport').onclick=importer;$('#backupBtn').onclick=backup;$('#guideBtn').onclick=guide;$('#composer').onsubmit=e=>send(e).catch(e=>toast(e.message));$('#stopBtn').onclick=()=>controller?.abort();$('#menu').onclick=openSidebar;$('#closeSidebar').onclick=()=>closeSidebar(true);$('#sidebarBackdrop').onclick=()=>closeSidebar(true);document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#sidebar').classList.contains('open')&&!$('#dialog').open)closeSidebar(true);});window.matchMedia('(max-width: 650px)').addEventListener('change',e=>{if(!e.matches)closeSidebar();});$('#prompt').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send().catch(e=>toast(e.message));}};
 $('#deleteBtn').onclick=async()=>{if(!chat()||!confirm('删除当前对话及它的记忆卡？此操作不能撤销。'))return;const previous=chats;chats=chats.filter(c=>c.id!==current);try{await save();}catch{chats=previous;return;}current=chats[0]?.id||null;mediaUI.resetDraft();render();};
 $('#demoBtn').onclick=async()=>{mediaUI.resetDraft();const c=newChat('海边书店 · 虚构示例');c.memory='这是虚构的小说创作示例。主角林舟在沿海小镇开了一家旧书店。偏好温暖、克制的叙述。上一幕：她在一本旧航海日志里发现了一张没有寄出的明信片。';c.messages=[{role:'user',content:'我们来写一个关于海边旧书店的故事。主角叫林舟，叙述温暖一点，不要过度煽情。'},{role:'assistant',content:'【本地虚构示例，未调用 API】\n\n黄昏时，林舟把门口的木牌翻到「营业中」。海风吹动桌上的纸页，一张褪色的明信片从旧航海日志里滑了出来。\n\n背面只有一句话：等潮水退去，我们就能看见那条路。\n\n——你可以打开右上角「记忆卡」查看设定，或备份这段对话。配置自己的 Key 后，发送消息即可真正续写。'}];chats.unshift(c);current=c.id;try{await save();render();}catch{}};
 function appearancePanel(){
- const original={...appearance},b=modal('给文字，选一种心情');
- note(b,'颜色与阅读设置免费使用。选你喜欢的氛围，不必迎合任何一种风格。');
- const grid=el('div',undefined,'palette-grid');b.append(grid);let draft={...appearance};
- const sample=el('div',undefined,'reading-sample');sample.append(el('small','此刻，只留给文字'),el('p','窗边的灯还亮着。\n你慢慢说，这一页不着急写完。'));
- function refresh(){applyAppearance(draft);for(const item of grid.children)item.setAttribute('aria-pressed',String(item.dataset.palette===draft.palette));}
- for(const p of palettes){const card=button(grid,'',()=>{draft={...draft,palette:p.id,color:p.color,night:p.night};custom.value=p.color;night.checked=p.night;refresh();},'palette');card.dataset.palette=p.id;card.setAttribute('aria-label',p.name);const swatch=el('span',undefined,'swatch');swatch.style.background=p.color;card.append(swatch,el('b',p.name),el('small',p.description));}
- const custom=field(b,'自选主题色','color',draft.color);custom.oninput=()=>{draft.color=custom.value;draft.palette='custom';refresh();};
- const nightlabel=el('label',undefined,'inline-check'),night=el('input');night.type='checkbox';night.checked=draft.night;nightlabel.append(night,document.createTextNode(' 使用深色背景'));b.append(nightlabel);night.onchange=()=>{draft.night=night.checked;refresh();};
- const controls=el('div',undefined,'reading-controls');b.append(controls);
- function select(label,values,value,onchange){const wrap=el('div'),l=el('label',label),input=el('select');input.id='s'+crypto.randomUUID();l.htmlFor=input.id;for(const [v,text]of values){const o=el('option',text);o.value=v;input.append(o);}input.value=String(value);input.onchange=()=>{onchange(input.value);refresh();};wrap.append(l,input);controls.append(wrap);}
- select('文字风格',Object.entries(fonts).map(([k,v])=>[k,v.name]),draft.font,v=>draft.font=v);
- select('聊天字号',[15,17,19,21].map(v=>[v,v+' px']),draft.size,v=>draft.size=+v);
- select('阅读行距',[[1.7,'紧凑'],[2,'舒展'],[2.3,'宽松']],draft.spacing,v=>draft.spacing=+v);
- b.append(sample);note(b,'字体使用设备自带字体，实际效果因设备而异，不下载远程字体。自选色会自动调整按钮对比度。');
- let committed=false;const revert=()=>{if(!committed)applyAppearance(original);};$('#dialog').addEventListener('close',revert,{once:true});
- const row=el('div',undefined,'row');b.append(row);button(row,'保存这份心情',()=>{storeLocal('appearance',draft);committed=true;applyAppearance(draft);close();toast('颜色与阅读设置已保存在本设备');},'primary');button(row,'取消预览',close);button(row,'恢复默认',()=>{draft={...defaultAppearance};custom.value=draft.color;night.checked=draft.night;const selects=controls.querySelectorAll('select');selects[0].value=draft.font;selects[1].value=draft.size;selects[2].value=draft.spacing;refresh();});refresh();
+ const original={...appearance},b=modal('颜色与阅读');
+ let draft={...appearance};
+ const theme=settingSection(b,'主题','选择一款配色，页面会立即预览。');
+ const grid=el('div',undefined,'palette-grid');theme.append(grid);
+ const reading=settingSection(b,'阅读排版');
+ const controls=el('div',undefined,'reading-controls');reading.append(controls);
+ function refresh(){
+  applyAppearance(draft);
+  for(const item of grid.children)item.setAttribute('aria-pressed',String(item.dataset.palette===draft.palette));
+ }
+ for(const p of palettes){
+  const card=button(grid,'',()=>{
+   draft={...draft,palette:p.id,color:p.color,night:p.night};
+   custom.value=p.color;night.checked=p.night;refresh();
+  },'palette');
+  card.dataset.palette=p.id;card.setAttribute('aria-label',p.name);
+  const swatch=el('span',undefined,'swatch');swatch.style.background=p.color;
+  card.append(swatch,el('b',p.name),el('small',p.description));
+ }
+ const colors=el('div',undefined,'theme-custom');theme.append(colors);
+ const custom=field(colors,'自选主题色','color',draft.color);
+ custom.oninput=()=>{draft.color=custom.value;draft.palette='custom';refresh();};
+ const nightLabel=el('label',undefined,'inline-check'),night=el('input');
+ night.type='checkbox';night.checked=draft.night;
+ nightLabel.append(night,document.createTextNode('深色背景'));colors.append(nightLabel);
+ night.onchange=()=>{draft.night=night.checked;refresh();};
+ function select(label,values,value,onchange){
+  const wrap=el('div'),l=el('label',label),input=el('select');
+  input.id='s'+crypto.randomUUID();l.htmlFor=input.id;
+  for(const [v,text] of values){const option=el('option',text);option.value=v;input.append(option);}
+  input.value=String(value);input.onchange=()=>{onchange(input.value);refresh();};
+  wrap.append(l,input);controls.append(wrap);return input;
+ }
+ const font=select('文字风格',Object.entries(fonts).map(([k,v])=>[k,v.name]),draft.font,v=>draft.font=v);
+ const size=select('聊天字号',[15,17,19,21].map(v=>[v,v+' px']),draft.size,v=>draft.size=+v);
+ const spacing=select('阅读行距',[[1.7,'紧凑'],[2,'舒展'],[2.3,'宽松']],draft.spacing,v=>draft.spacing=+v);
+ const sample=el('div',undefined,'reading-sample');
+ sample.append(el('small','阅读预览'),el('p','窗边的灯还亮着。\n你慢慢说，这一页不着急写完。'));
+ reading.append(sample);
+ let committed=false;
+ $('#dialog').addEventListener('close',()=>{if(!committed)applyAppearance(original);},{once:true});
+ const row=settingActions(b);
+ button(row,'恢复默认',()=>{
+  draft={...defaultAppearance};custom.value=draft.color;night.checked=draft.night;
+  font.value=draft.font;size.value=String(draft.size);spacing.value=String(draft.spacing);refresh();
+ });
+ button(row,'保存外观',()=>{
+  storeLocal('appearance',draft);committed=true;applyAppearance(draft);close();toast('颜色与阅读设置已保存在本设备');
+ },'primary');
+ refresh();
 }
-function licensePanel(){const b=modal('高级功能 · 授权');
+function licensePanel(){
+ const b=modal('高级功能 · 授权');
  const community=LICENSE_CHANNEL==='community';
- note(b,isPro()?(community?'已解锁 · 社区免费授权':'已解锁 · 站点授权'):'当前为免费基础版','notice');
- note(b,'全文与记忆搜索、保存与套用记忆模板需要有效授权。聊天、图片、语音、联网、阅读设置，以及查看、复制、删除、导出和加密备份始终免费。API 费用由服务方单独收取。');
- if(community){note(b,'这是自行部署版本。下载公开的社区免费授权文件，再在下方导入即可解锁；无需购买。该授权不适用于运营者提供的站点。');const a=el('a','下载社区免费授权');a.href='community.license';a.download='社区免费授权.license';b.append(a);}
- else note(b,'此站点只接受运营者签发的授权，不能使用公开的社区免费授权。请向站点运营者获取 license；本应用没有内置支付入口。');
- if(LICENSE_VERIFY_URL)note(b,'此站点会发送授权文件进行在线校验。聊天记录、设备标识和 API Key 留在浏览器中，不随授权发送。');
- if(licenseNotice)note(b,licenseNotice,'notice');
- if(isPro())note(b,`授权编号：${licenseInfo.id}。适用：0.x 版本。${licenseInfo.expires===null?'无到期日':`有效期至 ${new Date(licenseInfo.expires).toLocaleDateString('zh-CN')}`}。`);
- const text=field(b,'粘贴授权文件内容（JSON）','textarea');text.placeholder='粘贴 .license 文件中的完整内容';text.maxLength=20000;
- const file=field(b,'或选择 .license 授权文件','file');file.accept='.license,.json';file.onchange=async()=>{try{const f=file.files[0];if(!f)return;if(f.size>20000)throw Error('授权文件过大');text.value=await f.text();}catch(e){toast(e.message);}};
- const row=el('div',undefined,'row');b.append(row);
+ const active=isPro();
+ const current=settingSection(b,'授权状态');
+ const badge=el('span',active?'已解锁':'基础功能可用','setting-badge');
+ if(active)badge.dataset.active='true';
+ current.append(badge);
+ note(current,'授权可解锁全文和记忆搜索，以及保存、套用记忆模板。');
+ if(active)note(current,`编号 ${licenseInfo.id} · ${licenseInfo.expires===null?'永久有效':'有效期至 '+new Date(licenseInfo.expires).toLocaleDateString('zh-CN')}`);
+ const upload=settingSection(b,'导入授权文件');
+ if(community){
+  note(upload,'下载免费的社区授权文件，再选择该文件验证。');
+  const link=el('a','下载社区免费授权');link.href='community.license';link.download='社区免费授权.license';upload.append(link);
+ }else note(upload,'选择从本站获取的 .license 文件。');
+ const {input:file,clear:clearFile}=filePicker(upload,'选择 .license 文件','.license,.json');
+ const alternate=settingDetails(upload,'粘贴授权内容');
+ const raw=field(alternate,'授权 JSON','textarea');raw.placeholder='粘贴完整的授权文件内容';raw.maxLength=20000;
+ const status=settingStatus(upload,licenseNotice);
+ let fileContent=null;
+ file.onchange=async()=>{
+  const selected=file.files[0];
+  fileContent=null;status.textContent='';
+  if(!selected)return;
+  if(selected.size>20000){status.textContent='授权文件过大。';clearFile();return;}
+  try{
+   const text=await selected.text();
+   if(file.files[0]!==selected)return;
+   fileContent=text;raw.value='';alternate.open=false;
+  }catch(error){status.textContent=error.message;}
+ };
+ const row=settingActions(upload);
  const apply=button(row,'验证并解锁',async()=>{
-  let envelope;try{envelope=JSON.parse(text.value);}catch{throw Error('请粘贴完整的授权 JSON 或选择授权文件');}
-  const revision=++licenseRevision;
-  licenseSubmitting=true;
   apply.disabled=true;
+  let envelope;
+  try{
+   const source=raw.value.trim()||fileContent||(file.files[0]&&await file.files[0].text());
+   if(!source||source.length>20000)throw Error();
+   envelope=JSON.parse(source);
+  }catch{status.textContent='请选择授权文件，或粘贴完整的授权 JSON。';apply.disabled=false;return;}
+  if(!apply.isConnected){apply.disabled=false;return;}
+  const revision=++licenseRevision;
+  licenseSubmitting=true;status.textContent='正在验证…';
   try{
    const verified=await checkLicense(envelope);
    if(revision!==licenseRevision)return;
    storeLocal('license',envelope);licenseInfo=verified;licenseNotice='';
-   text.value='';if(b.contains(apply))close();render();toast('高级功能已解锁');
-  }finally{licenseSubmitting=false;apply.disabled=false;}
+   render();
+   if(apply.isConnected){licensePanel();toast('高级功能已解锁');}
+  }catch(error){status.textContent=error.message;}
+  finally{licenseSubmitting=false;apply.disabled=false;}
  },'primary');
- button(row,'移除本机授权',()=>{++licenseRevision;localStorage.removeItem('xuye-license');licenseInfo=null;licenseNotice='';fullSearch=false;close();render();toast('已切回免费基础版，记录和已保存模板保留');});
- note(b,'更新或切换站点后，会按当前站点的验签配置重新校验已保存的授权。授权不匹配时，仅关闭高级操作，已有聊天和模板仍保留。');
+ if(loadLocal('license',null)){
+  button(settingActions(current),'移除本机授权',()=>{
+   ++licenseRevision;localStorage.removeItem('xuye-license');licenseInfo=null;licenseNotice='';fullSearch=false;
+   render();licensePanel();toast('已移除本机授权，已有聊天与模板保留');
+  },'secondary');
+ }
+ note(settingDetails(b,'校验和数据说明'),LICENSE_VERIFY_URL?'在线校验只发送授权文件。聊天、API Key 和设备标识不随授权发送。':'授权在本机校验。移除授权后，已有模板仍可查看、复制、删除和备份。');
 }
 
 async function libraryPanel(){if(busy)return toast('请先停止当前生成');if(!chat())await makeChat();const c=chat(),b=modal('记忆模板 · '+c.title);note(b,'为同一段对话保留不同的人物设定或故事阶段。套用时替换当前记忆卡；原有模板仍会保留。');
@@ -221,7 +541,7 @@ async function libraryPanel(){if(busy)return toast('请先停止当前生成');i
 }
 $('#manageBtn').onclick=managePanel;$('#appearanceBtn').onclick=appearancePanel;$('#quickTheme').onclick=appearancePanel;$('#licenseBtn').onclick=licensePanel;$('#libraryBtn').onclick=()=>libraryPanel().catch(e=>toast(e.message));$('#fullSearch').onchange=e=>{if(e.target.checked&&!isPro()){e.target.checked=false;licensePanel();return;}fullSearch=e.target.checked;render();};
 window.addEventListener('beforeunload',e=>{if(busy){e.preventDefault();e.returnValue='';}});
-mediaUI=createMediaUI({$,el,button,field,note,modal,toast,getKey:()=>key,isBusy:()=>busy,apiError,loadLocal,storeLocal,save:async id=>{for(const c of chats)for(const m of [...c.messages,...(c.revisions||[]).flatMap(r=>r.messages)])for(const d of m.documents||[])if(d.id===id)d.deleted=true;await save();render();}});
+mediaUI=createMediaUI({$,el,button,field,note,modal,toast,settingSection,settingDetails,getKey:()=>key,isBusy:()=>busy,apiError,loadLocal,storeLocal,save:async id=>{for(const c of chats)for(const m of [...c.messages,...(c.revisions||[]).flatMap(r=>r.messages)])for(const d of m.documents||[])if(d.id===id)d.deleted=true;await save();render();}});
 loadLicense();
 if(LICENSE_VERIFY_URL){
  let nextCheck=Date.now()+15*60_000;

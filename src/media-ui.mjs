@@ -4,7 +4,7 @@ import {createSpeech} from './speech.mjs';
 import {prepareImage,startRecording} from './browser-media.mjs';
 import {IMAGE_LIMIT,cleanImages,ttsRequest,sourcesFor,cleanAnnotations,validateWav} from './media.mjs';
 
-export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,apiError,loadLocal,storeLocal,save}) {
+export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,apiError,loadLocal,storeLocal,save,settingSection,settingDetails}) {
  let images=[],webEnabled=false,thinkingEnabled=false,generation=0,preparing=false,dispose=()=>{};
  const documents=createDocumentUI({$,el,button,field,note,modal,toast,getKey,isBusy,save,loadLocal});
  const speech=createSpeech({getKey,getVoice:()=>loadLocal('voice','tide'),apiError});
@@ -65,5 +65,36 @@ export function createMediaUI({$,el,button,field,note,modal,toast,getKey,isBusy,
   if(message.toolStatus)article.append(el('p',message.toolStatus,'subtle'));
  }
  $('#voiceBtn').onclick=voicePanel;
- return {draw,snapshotDraft:()=>({images:[...images],documents:documents.snapshot(),webEnabled,thinkingEnabled}),restoreDraft(state){speech.stop(true);generation++;preparing=false;images=[...(state?.images||[])];webEnabled=!!state?.webEnabled;thinkingEnabled=!!state?.thinkingEnabled;documents.restore(state?.documents);draw();},loadMessage(message){speech.stop(true);generation++;preparing=false;images=cleanImages(message.images);documents.loadMessage(message.documents);draw();},cleanup,stopSpeech:()=>speech.stop(true),resetDraft,readAloud,renderContent,renderExtras,uploadDocuments:signal=>documents.upload(signal),options:()=>({images:[...images],webEnabled,thinkingEnabled,...documents.options()}),assertReady(){if(preparing)throw Error('图片正在处理，请稍候再发送');},sent(){images=[];documents.reset();draw();},settings(){const b=modal('文件、图片、语音与联网');note(b,'这些功能的入口免费开放，调用费用由 DeepSeek 按你的账户计收。');const label=el('label','朗读声音'),select=el('select');select.id='speechVoice';label.htmlFor=select.id;for(const [id,name]of [['stella','Stella · 女声'],['tide','Tide · 男声']]){const option=el('option',name);option.value=id;select.append(option);}select.value=loadLocal('voice','tide')==='stella'?'stella':'tide';select.onchange=()=>{try{storeLocal('voice',select.value);speech.stop(true);toast('朗读声音已保存');}catch(e){toast(e.message);}};b.append(label,select);const modeLabel=el('label','PDF / Word / PPT 默认读取方式'),mode=el('select');mode.id='documentDefaultMode';modeLabel.htmlFor=mode.id;for(const [value,text]of [['text','只读取文字'],['figures','文字与图表（可能增加用量）']]){const o=el('option',text);o.value=value;mode.append(o);}mode.value=loadLocal('documentMode','text')==='figures'?'figures':'text';mode.onchange=()=>{try{storeLocal('documentMode',mode.value);toast('读取方式已保存，下次添加文件时生效');}catch(e){toast(e.message);}};b.append(modeLabel,mode);for(const [title,text]of [['文件','点击「文件」选择 PDF、Word、PPT、表格、电子书或文本 / 代码。每条消息最多 4 个，每个不超过 20 MB。选择后直接加入草稿，点击发送才直传 DeepSeek。读取方式在上方设置，下次添加文件时生效。解析可能按页计费；官方最长保留 30 天，删除或过期后需重加原件。聊天只备份名称与引用，不含原文件。'],['图片','输入框下方点击「图片」。每次最多 4 张，原图每张不超过 8 MB；本地缩放至最长边 1536 像素并重新编码，不保留原图元数据；GIF 仅取一帧。历史与本轮合计最多 8 张，超出时移除最早的完整对话轮次。'],['语音输入','点击「语音」录音，试听后转成文字，检查再发送。关闭窗口会停止录音或请求并释放音频。'],['回复朗读','完整回复下方点击「朗读」即生成并播放，再点可停止。朗读文字会发送给 DeepSeek 并单独计费；声音在上方选择。同一段音频在本页可重复播放，切换对话、重新渲染消息或关闭页面后释放。'],['深度思考','默认关闭，点击输入区的开关直接切换。开启后模型先思考再回答，可能增加等待时间和 API 用量；可与联网同时开启。切换对话或刷新后关闭。'],['联网','默认关闭，点击开关直接切换；开启后由模型决定搜索和读取网页。答案显示引用，来源链接只在你点击时访问。切换对话或刷新后关闭。'],['本地数据','发送的处理后图片和引用随对话保存在本机，并包含在 v2 备份中；麦克风录音、朗读音频和 Key 不进入备份。']]){b.append(el('h3',title));note(b,text);}}};
+ return {draw,snapshotDraft:()=>({images:[...images],documents:documents.snapshot(),webEnabled,thinkingEnabled}),restoreDraft(state){speech.stop(true);generation++;preparing=false;images=[...(state?.images||[])];webEnabled=!!state?.webEnabled;thinkingEnabled=!!state?.thinkingEnabled;documents.restore(state?.documents);draw();},loadMessage(message){speech.stop(true);generation++;preparing=false;images=cleanImages(message.images);documents.loadMessage(message.documents);draw();},cleanup,stopSpeech:()=>speech.stop(true),resetDraft,readAloud,renderContent,renderExtras,uploadDocuments:signal=>documents.upload(signal),options:()=>({images:[...images],webEnabled,thinkingEnabled,...documents.options()}),assertReady(){if(preparing)throw Error('图片正在处理，请稍候再发送');},sent(){images=[];documents.reset();draw();},settings(){
+  const b=modal('文件、图片、语音与联网');
+  const voice=settingSection(b,'回复朗读','在回复下方点击「朗读」即可播放。');
+  const label=el('label','朗读声音'),select=el('select');
+  select.id='speechVoice';label.htmlFor=select.id;
+  for(const [id,name] of [['tide','Tide · 男声'],['stella','Stella · 女声']]){
+   const option=el('option',name);option.value=id;select.append(option);
+  }
+  select.value=loadLocal('voice','tide')==='stella'?'stella':'tide';
+  select.onchange=()=>{
+   try{storeLocal('voice',select.value);speech.stop(true);toast('朗读声音已保存');}catch(error){toast(error.message);}
+  };
+  voice.append(label,select);
+  const documents=settingSection(b,'文档读取','设置会在下次添加文档时生效。');
+  const modeLabel=el('label','PDF、Word 和 PPT 读取方式'),mode=el('select');
+  mode.id='documentDefaultMode';modeLabel.htmlFor=mode.id;
+  for(const [value,text] of [['text','只读取文字'],['figures','文字与图表']]){
+   const option=el('option',text);option.value=value;mode.append(option);
+  }
+  mode.value=loadLocal('documentMode','text')==='figures'?'figures':'text';
+  mode.onchange=()=>{
+   try{storeLocal('documentMode',mode.value);toast('文档读取方式已保存');}catch(error){toast(error.message);}
+  };
+  documents.append(modeLabel,mode);
+  note(documents,'读取图表可能增加用量。文件在发送消息时直传 DeepSeek。');
+  const help=settingSection(b,'功能说明');
+  for(const [title,text] of [
+   ['文件和图片','每条消息最多 4 个文件和 4 张图片。单个原文件最多 20 MB，原图最多 8 MB。上传文件后，官方最多保留 30 天。备份只保留文档名称和引用。图片在本机缩放，GIF 仅保留一帧。'],
+   ['录音和朗读','录音先留在页面，点击转成文字时才上传。点击朗读会将回复文字发送给 DeepSeek。两种音频均不写入聊天备份，费用以官方账单为准。'],
+   ['联网和深度思考','这两个开关位于输入框下方，默认关闭，刷新或切换对话后会重置。联网可搜索和读取网页，打开来源链接由你决定。启用工具可能产生额外用量。']
+  ])note(settingDetails(help,title),text);
+ }}; 
 }

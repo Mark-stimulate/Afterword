@@ -40,12 +40,12 @@ h1 em{color:var(--green)}#composer{border-color:var(--line);box-shadow:0 8px 30p
 @media(max-width:650px){
  footer{padding-top:8px;padding-bottom:10px}
  footer:not(:focus-within):not(:has(#stopBtn:not([hidden]))) #contextLine,
- #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composer-tools,
- #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .composerbottom,
- #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .attachment-tray{display:none}
+ #composer:not(.is-editing):not(:focus-within):has(#prompt:placeholder-shown):not(:has(#stopBtn:not([hidden]),.attachment-tray:not([hidden]),.document-tray:not([hidden]))) .composer-tools,
+ #composer:not(.is-editing):not(:focus-within):has(#prompt:placeholder-shown):not(:has(#stopBtn:not([hidden]),.attachment-tray:not([hidden]),.document-tray:not([hidden]))) .composerbottom,
+ #composer:not(.is-editing):not(:focus-within):has(#prompt:placeholder-shown):not(:has(#stopBtn:not([hidden]),.attachment-tray:not([hidden]),.document-tray:not([hidden]))) .attachment-tray{display:none}
  #composer{padding:6px 10px}
  #composer #prompt{height:90px;min-height:90px;resize:none}
- #composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) #prompt{height:44px;min-height:44px;overflow:hidden;white-space:nowrap}
+ #composer:not(.is-editing):not(:focus-within):has(#prompt:placeholder-shown):not(:has(#stopBtn:not([hidden]),.attachment-tray:not([hidden]),.document-tray:not([hidden]))) #prompt{height:44px;min-height:44px;overflow:hidden;white-space:nowrap}
 }
 .speech-status{display:block;clear:both;font-size:11px;letter-spacing:0;color:var(--muted);padding-top:6px;overflow-wrap:anywhere}
 
@@ -82,7 +82,7 @@ nav .conversation-more{flex:0 0 36px;width:36px;min-height:40px;margin:0;padding
 .document-card button{position:absolute;right:4px;top:4px;min-width:32px;min-height:32px;padding:5px}
 .message-documents button{border:1px solid var(--line);background:var(--sage);max-width:100%;text-align:left;overflow-wrap:anywhere;font-size:13px}
 .document-list{border:1px solid var(--line);border-radius:12px;padding:0 14px;margin:16px 0}
-@media(max-width:650px){#composer:not(.is-editing):not(:focus-within):not(:has(#stopBtn:not([hidden]))) .document-tray{display:none}}
+@media(max-width:650px){#composer:not(.is-editing):not(:focus-within):has(#prompt:placeholder-shown):not(:has(#stopBtn:not([hidden]),.attachment-tray:not([hidden]),.document-tray:not([hidden]))) .document-tray{display:none}}
 
 /* Keep message actions with their content and align the sidebar dots optically. */
 nav .conversation-more{display:flex;align-items:center;justify-content:center;padding:0}
@@ -132,3 +132,80 @@ nav .conversation-more{display:flex;align-items:center;justify-content:center;pa
 
 /* Keep short status messages clear of the composer and mobile safe area. */
 #toast{top:max(16px,env(safe-area-inset-top));bottom:auto;z-index:100;width:max-content;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}
+
+/* Settings share the same type, spacing and colors as the reading view. */
+dialog[open]{display:flex;flex-direction:column;overflow:hidden;padding:0;width:580px;max-width:calc(100vw - 24px);max-height:88dvh}
+.dialoghead{flex:0 0 auto;gap:12px;margin:0;padding:17px 24px;border-bottom:1px solid var(--line);background:var(--bg)}
+#dialogTitle{margin:0;line-height:1.45;overflow-wrap:anywhere}
+#dialogTitle:focus{outline:none}
+#closeDialog{min-width:44px;min-height:44px;flex:none}
+#closeDialog.dialog-back{padding:8px 13px;border:1px solid var(--line);color:var(--ink);font-size:13px}
+#dialogBody{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 24px 24px}
+#dialogBody>:first-child{margin-top:0}
+#dialogBody>:last-child{margin-bottom:0}
+#dialogBody .setting-section{padding:16px 18px;margin:0 0 12px;background:var(--paper);border:1px solid var(--line);border-radius:13px}
+#dialogBody .setting-section h3,#dialogBody .manage-group h3{margin:0 0 5px;color:var(--ink);font-size:15px;font-weight:650;line-height:1.5}
+.setting-section p,.setting-details p{margin:6px 0 0}
+.setting-section a{display:inline-block;margin-top:8px}
+#dialogBody .setting-section label{margin-top:12px}
+.setting-actions{justify-content:flex-end;margin:12px 0 0;align-items:center}
+.setting-actions button{min-height:43px}
+#dialogBody button.secondary{border:1px solid var(--line);background:var(--paper);color:var(--ink)}
+#dialogBody button.secondary:hover{background:var(--sage)}
+#dialogBody button.danger{color:var(--danger,#a33240);border:1px solid var(--line)}
+.setting-status{padding:9px 11px;margin-top:10px;border-radius:8px;background:var(--sage);color:var(--ink);font-size:13px;overflow-wrap:anywhere}
+.setting-status:empty{display:none}
+.setting-details{margin:10px 0 0;border:1px solid var(--line);border-radius:9px;padding:0 12px;color:var(--muted)}
+.setting-details summary{padding:8px 0;min-height:40px;color:var(--ink)}
+.setting-details[open]{padding-bottom:12px}
+.setting-details[open]>summary{font-weight:600}
+.setting-details>:last-child{margin-bottom:0}
+.setting-section .setting-details{background:var(--bg)}
+.setting-badge{display:inline-block;margin-top:4px;padding:2px 9px;border-radius:20px;background:var(--sage);font-size:13px;color:var(--ink)}
+.setting-badge[data-active=true]{background:var(--green);color:var(--on-primary)}
+.manage-group{margin:0 0 14px}
+.manage-menu{gap:0;overflow:hidden;border:1px solid var(--line);border-radius:13px;background:var(--paper)}
+.manage-menu button{display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-radius:0;background:transparent;padding:8px 14px;min-height:54px;color:var(--ink)}
+.manage-menu button+button{border-top:1px solid var(--line)}
+.manage-menu button:focus-visible{outline-offset:-3px}
+.manage-label{display:grid;gap:2px;line-height:1.45}
+.manage-label strong{font-weight:600;color:var(--ink)}
+.manage-label small{font-size:12px;color:var(--muted)}
+.manage-chevron{font-size:20px;color:var(--muted);line-height:1}
+.settings-help{margin-top:4px;color:var(--muted);min-height:44px}
+.theme-custom{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-top:12px}
+#dialogBody .theme-custom label{margin:0}
+#dialogBody .theme-custom input[type=color]{width:52px;min-height:38px;height:38px;padding:3px}
+#dialogBody .theme-custom .inline-check{margin-left:auto}
+#dialogBody .palette{min-height:80px}
+.reading-sample{margin-top:14px}
+.reading-sample small{letter-spacing:.04em}
+.usage-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0 0}
+.usage-stats>div{padding:8px 10px;background:var(--sage);border-radius:8px;min-width:0}
+.usage-stats dt{color:var(--muted);font-size:12px}
+.usage-stats dd{margin:2px 0 0;color:var(--ink);font-size:20px;line-height:1.4;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.setting-status .usage-stats{margin:0}
+.setting-status .usage-stats>div{padding:0}
+.guide-steps{margin:10px 0 0;padding-left:22px}
+.guide-steps li+li{margin-top:10px}
+.guide-steps li span{display:block;color:var(--muted);font-size:13px}
+#dialogBody .file-picker{position:relative;display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center;padding:9px 11px;border:1px dashed var(--line);border-radius:9px;background:var(--bg);cursor:pointer}
+.file-picker:hover{border-color:var(--green)}
+.file-picker:focus-within{outline:2px solid var(--green);outline-offset:2px}
+#dialogBody .file-picker .file-picker-input{position:absolute;width:1px;height:1px;margin:0;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap;border:0}
+.file-picker strong{display:inline-block;padding:6px 9px;border-radius:6px;background:var(--sage);color:var(--ink);font-weight:600}
+.file-picker-name{min-width:0;color:var(--muted);overflow-wrap:anywhere}
+@media(max-width:650px){
+ dialog[open]{max-height:calc(100dvh - 24px)}
+ .dialoghead{padding:10px 15px}
+ #dialogBody{padding:12px 14px 16px}
+ #dialogBody .setting-section{padding:12px 13px}
+ #dialogBody :is(.setting-section,.setting-details,.guide-steps) :is(label,.subtle){font-size:13px}
+ #dialogBody input:not([type=checkbox]):not([type=radio]),#dialogBody textarea,#dialogBody select{font-size:16px}
+ .setting-actions button{min-height:44px}
+ .manage-menu button{min-height:54px}
+ .usage-stats{gap:5px}
+ .usage-stats>div{padding:6px 7px}
+ .usage-stats dt{font-size:11px}
+ .usage-stats dd{font-size:17px}
+}
