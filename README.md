@@ -18,6 +18,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Mark-stimulate/Afterword/actions/workflows/check.yml"><img src="https://github.com/Mark-stimulate/Afterword/actions/workflows/check.yml/badge.svg?branch=main" alt="GitHub Checks"></a>
+  &nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-8b695c" alt="MIT License"></a>
+</p>
+
+<p align="center">
   <sub>独立开源客户端，与 DeepSeek 官方无隶属关系。</sub>
 </p>
 
