@@ -3,6 +3,8 @@ import {verifyLicense} from '../src/license.mjs';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const MAX_BODY = 20_000;
+const HISTORY_PAGE_SIZE = 30;
+const isLicenseId = id => typeof id === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id);
 const securityHeaders = {
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
@@ -96,16 +98,34 @@ async function authorizeAdmin(request, env, context) {
   return false;
 }
 
-async function issue(env) {
-  const id = crypto.randomUUID();
-  const notBefore = new Date().toISOString();
+async function signLicense(env, id, notBefore) {
   const payload = JSON.stringify({product: 'xuye', tier: 'pro', major: 0, kind: 'paid', id, notBefore, expires: null});
   const key = await crypto.subtle.importKey('jwk', JSON.parse(env.SIGNING_KEY), {name: 'ECDSA', namedCurve: 'P-256'}, false, ['sign']);
   const signature = base64(await crypto.subtle.sign({name: 'ECDSA', hash: 'SHA-256'}, key, encoder.encode(payload)));
   const license = {format: 'xuye-license-v1', payload, signature};
   await verifyLicense(license, JSON.parse(env.PUBLIC_KEY), {channel: 'official'});
+  return license;
+}
+
+async function issue(env) {
+  const id = crypto.randomUUID();
+  const notBefore = new Date().toISOString();
+  const license = await signLicense(env, id, notBefore);
   await env.LICENSE_DB.prepare('INSERT INTO licenses (id, issued_at) VALUES (?, ?)').bind(id, notBefore).run();
   return json({id, license}, 201);
+}
+
+async function licenseHistory(env, after) {
+  if (after !== null && !isLicenseId(after)) return error(400, 'input');
+  const fields = 'SELECT id, issued_at, revoked_at FROM licenses';
+  const order = ' ORDER BY issued_at DESC, id DESC LIMIT ?';
+  const query = after
+    ? env.LICENSE_DB.prepare(fields + ' WHERE (issued_at, id) < (SELECT issued_at, id FROM licenses WHERE id = ?)' + order).bind(after, HISTORY_PAGE_SIZE + 1)
+    : env.LICENSE_DB.prepare(fields + order).bind(HISTORY_PAGE_SIZE + 1);
+  const {results} = await query.all();
+  const licenses = results.slice(0, HISTORY_PAGE_SIZE);
+  const next = results.length > HISTORY_PAGE_SIZE ? licenses.at(-1).id : null;
+  return json({licenses, next});
 }
 
 async function check(request, env, headers) {
@@ -122,13 +142,17 @@ async function check(request, env, headers) {
 }
 
 const adminPage = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>拾语 · 授权管理</title><style>
-:root{color-scheme:light;font:16px system-ui,sans-serif;color:#2b2328;background:#faf5f2}main{max-width:44rem;margin:8vh auto;padding:1.5rem}h1{font:2rem Georgia,serif}button{padding:.75rem 1rem;border:1px solid #b87965;border-radius:.65rem;background:#a75d46;color:#fff;font:inherit;cursor:pointer}button:disabled{opacity:.55}ul{padding-left:1.2rem}li{margin:1rem 0;overflow-wrap:anywhere}li button{margin:.4rem .4rem 0 0;background:white;color:#773f31}#notice{min-height:1.5em}a{color:#773f31}</style><main><h1>拾语 · 授权管理</h1><p>签发永久商用授权，并下载授权文件。</p><button id="issue">签发并下载授权</button><p id="notice" role="status"></p><section><h2>近期授权</h2><ul id="licenses"></ul></section></main><script src="/admin/ui.js" defer></script></html>`;
+:root{color-scheme:light;font:16px system-ui,sans-serif;color:#2b2328;background:#faf5f2}main{max-width:44rem;margin:8vh auto;padding:1.5rem}h1{font:2rem Georgia,serif}button{padding:.75rem 1rem;border:1px solid #b87965;border-radius:.65rem;background:#a75d46;color:#fff;font:inherit;cursor:pointer}button:disabled{opacity:.55}ul{padding-left:1.2rem}li{margin:1rem 0;overflow-wrap:anywhere}.license-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}.secondary{background:white;color:#773f31}#notice{min-height:1.5em}a{color:#773f31}</style><main><h1>拾语 · 授权管理</h1><p>签发永久商用授权，并下载授权文件。</p><button id="issue">签发并下载授权</button><p id="notice" role="status"></p><section><h2>授权历史</h2><ul id="licenses"></ul><button id="older" class="secondary" hidden>加载更早的授权</button></section></main><script src="/admin/ui.js" defer></script></html>`;
 
 const adminScript = `const notice=document.querySelector('#notice');
 const issue=document.querySelector('#issue');
 const list=document.querySelector('#licenses');
+const older=document.querySelector('#older');
+let nextPage=null;
+let historyRequest=0;
 async function api(path, body) {
   const response=await fetch('/admin/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(response.status===409) throw new Error('这份授权已撤销，无法重新下载。');
   if(!response.ok) throw new Error('操作未成功，请检查登录状态后重试。');
   return response.json();
 }
@@ -137,24 +161,46 @@ function download(data) {
   const link=document.createElement('a');link.href=url;link.download='Afterword-'+data.id+'.license';link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-async function refresh() {
-  const {licenses}=await api('licenses');
-  list.replaceChildren(...licenses.map(row=>{
-    const item=document.createElement('li');
-    item.textContent=row.id+' · '+new Date(row.issued_at).toLocaleString('zh-CN')+' · '+(row.revoked_at?'已撤销':'可用');
-    if(!row.revoked_at){
-      const revoke=document.createElement('button');revoke.textContent='撤销授权';
-      revoke.onclick=async()=>{if(!confirm('撤销后，这份授权将无法通过在线校验。确认撤销？'))return;
-        revoke.disabled=true;try{await api('revoke',{id:row.id});await refresh();notice.textContent='授权已撤销。';}catch(e){notice.textContent=e.message;revoke.disabled=false;}};
-      item.append(document.createElement('br'),revoke);
-    }
-    return item;
-  }));
-  if(!licenses.length)list.textContent='尚无授权。';
+function licenseRow(row) {
+  const item=document.createElement('li');
+  const status=document.createElement('span');
+  const description=row.id+' · '+new Date(row.issued_at).toLocaleString('zh-CN')+' · ';
+  status.textContent=description+(row.revoked_at?'已撤销':'可用');
+  item.append(status);
+  if(row.revoked_at)return item;
+  const actions=document.createElement('div');actions.className='license-actions';
+  const again=document.createElement('button');again.className='secondary';again.textContent='重新下载';
+  again.onclick=async()=>{again.disabled=true;try{
+    download(await api('download',{id:row.id}));
+    notice.textContent='已重新下载，授权编号保持不变。';
+  }catch(e){notice.textContent=e.message;}finally{again.disabled=false;}};
+  const revoke=document.createElement('button');revoke.className='secondary';revoke.textContent='撤销授权';
+  revoke.onclick=async()=>{if(!confirm('撤销后，这份授权将无法通过在线校验。确认撤销？'))return;
+    again.disabled=revoke.disabled=true;
+    try{await api('revoke',{id:row.id});status.textContent=description+'已撤销';actions.remove();notice.textContent='授权已撤销。';}
+    catch(e){notice.textContent=e.message;again.disabled=revoke.disabled=false;}};
+  actions.append(again,revoke);item.append(actions);
+  return item;
 }
+async function refresh(append=false) {
+  const cursor=append?nextPage:null;
+  const request=++historyRequest;
+  older.disabled=true;
+  try{
+    const {licenses,next}=await api('licenses'+(cursor?'?after='+encodeURIComponent(cursor):''));
+    if(request!==historyRequest)return;
+    const rows=licenses.map(licenseRow);
+    if(append)list.append(...rows);
+    else list.replaceChildren(...rows);
+    if(!list.childElementCount){
+      const empty=document.createElement('li');empty.textContent='尚无授权。';list.append(empty);
+    }
+    nextPage=next;older.hidden=!next;
+  }finally{if(request===historyRequest)older.disabled=false;}
+}
+older.onclick=()=>refresh(true).catch(e=>{notice.textContent=e.message;});
 issue.onclick=async()=>{issue.disabled=true;try{
-  const data=await api('issue',{});download(data);notice.textContent='已签发。请妥善保管下载的授权文件。';
-  const retry=document.createElement('button');retry.textContent='再次下载本次授权';retry.onclick=()=>download(data);notice.append(' ',retry);
+  const data=await api('issue',{});download(data);notice.textContent='已签发。可在授权历史中重新下载。';
   await refresh();
 }catch(e){notice.textContent=e.message;}finally{issue.disabled=false;}};
 refresh().catch(e=>{notice.textContent=e.message;});`;
@@ -170,18 +216,22 @@ async function admin(request, env, url, context) {
   if (request.method === 'GET') {
     if (isAdminPage) return new Response(adminPage, {headers: {...securityHeaders, 'Content-Type': 'text/html; charset=utf-8'}});
     if (url.pathname === '/admin/ui.js') return new Response(adminScript, {headers: {...securityHeaders, 'Content-Type': 'text/javascript; charset=utf-8'}});
-    if (url.pathname === '/admin/licenses') {
-      const rows = await env.LICENSE_DB.prepare('SELECT id, issued_at, revoked_at FROM licenses ORDER BY issued_at DESC LIMIT 100').all();
-      return json({licenses: rows.results});
-    }
+    if (url.pathname === '/admin/licenses') return licenseHistory(env, url.searchParams.get('after'));
   }
   if (request.method === 'POST') {
     if (request.headers.get('Origin') !== url.origin) return error(403, 'origin');
     let body;
     try { body = await readJSON(request); } catch { return error(400, 'input'); }
     if (url.pathname === '/admin/issue') return issue(env);
+    if (url.pathname === '/admin/download') {
+      if (!isLicenseId(body?.id)) return error(400, 'input');
+      const row = await env.LICENSE_DB.prepare('SELECT id, issued_at, revoked_at FROM licenses WHERE id = ?').bind(body.id).first();
+      if (!row) return error(404, 'unknown_license');
+      if (row.revoked_at) return error(409, 'revoked_license');
+      return json({id: row.id, license: await signLicense(env, row.id, row.issued_at)});
+    }
     if (url.pathname === '/admin/revoke') {
-      if (typeof body?.id !== 'string' || !/^[\da-f-]{36}$/i.test(body.id)) return error(400, 'input');
+      if (!isLicenseId(body?.id)) return error(400, 'input');
       const result = await env.LICENSE_DB.prepare('UPDATE licenses SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?').bind(new Date().toISOString(), body.id).run();
       return result.meta.changes ? json({revoked: true}) : error(404, 'unknown_license');
     }
