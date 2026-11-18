@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <sub>独立开源客户端，与 DeepSeek 官方无隶属关系。</sub>
+  <sub>独立开源的对话迁移与续聊工具，与 DeepSeek 官方无隶属关系。</sub>
 </p>
 
 <p align="center">
