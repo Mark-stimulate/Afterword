@@ -4,8 +4,8 @@ import {createMediaUI} from './media-ui.mjs';
 import {chatRequest,applyChunk,previewMessages} from './media.mjs';
 import {readDeepSeekZip} from './zip-import.mjs';
 import {newChat,editedBranch,importText,contextFor,readSSE,encryptBackup,decryptBackup} from './core.mjs';
-import {verifyLicense,licenseActive} from './license.mjs';
-import {LICENSE_CHANNEL,PUBLIC_KEY} from './build-config.mjs';
+import {verifySiteLicense,licenseActive} from './license.mjs';
+import {LICENSE_CHANNEL,PUBLIC_KEY,LICENSE_VERIFY_URL} from './build-config.mjs';
 import {palettes,fonts,defaultAppearance,cleanAppearance,themeVars} from './appearance.mjs';
 const $=s=>document.querySelector(s), el=(tag,txt,cls)=>{const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;};
 function savedKeyState(){try{return readKeyState(localStorage);}catch{return {mode:'none'};}}
@@ -13,12 +13,25 @@ const initialKey=savedKeyState();
 let db,chats=[],current=null,key=initialKey.mode==='plain'?initialKey.key:'',busy=false,controller=null,toastTimer;
 let mediaUI,dialogReturn=null,editing=null;
 let licenseInfo=null,appearance={...defaultAppearance},fullSearch=false;
+let licenseRevision=0,licenseNotice='',licenseSubmitting=false;
 function isPro(){return licenseActive(licenseInfo);}
 function loadLocal(name,fallback){try{return JSON.parse(localStorage.getItem('xuye-'+name))??fallback;}catch{return fallback;}}
 function storeLocal(name,value){try{localStorage.setItem('xuye-'+name,JSON.stringify(value));}catch{throw Error('浏览器无法保存设置，请检查本地空间或权限');}}
 function applyAppearance(value){appearance=cleanAppearance(value);for(const [name,v]of Object.entries(themeVars(appearance)))document.documentElement.style.setProperty(name,v);document.documentElement.dataset.night=String(appearance.night);}
 applyAppearance(loadLocal('appearance',defaultAppearance));
-async function loadLicense(){const saved=loadLocal('license',null);if(saved)try{licenseInfo=await verifyLicense(saved,PUBLIC_KEY,{channel:LICENSE_CHANNEL});}catch{licenseInfo=null;}updatePlan();}
+function checkLicense(envelope){return verifySiteLicense(envelope,PUBLIC_KEY,{channel:LICENSE_CHANNEL,verifyUrl:LICENSE_VERIFY_URL});}
+async function loadLicense(){
+ const saved=loadLocal('license',null);
+ if(!saved||licenseSubmitting)return;
+ const revision=++licenseRevision;
+ let verified=null,message='';
+ try{verified=await checkLicense(saved);}catch(error){message=error.message;}
+ if(revision!==licenseRevision)return;
+ licenseInfo=verified;
+ licenseNotice=message;
+ if(!verified&&fullSearch){fullSearch=false;if(!busy)render();}
+ updatePlan();
+}
 function updatePlan(){const b=$('#licenseBtn');if(b)b.textContent=isPro()?(licenseInfo.kind==='community'?'已解锁 · 社区免费授权':'已解锁 · 站点授权'):'免费基础版 · 高级功能';const toggle=$('#fullSearch');if(toggle)toggle.checked=fullSearch&&isPro();}
 const chat=()=>chats.find(c=>c.id===current);
 function toast(t){($('#dialog').open?$('#dialog'):document.body).append($('#toast'));$('#toast').textContent=t;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
@@ -171,17 +184,31 @@ function appearancePanel(){
  let committed=false;const revert=()=>{if(!committed)applyAppearance(original);};$('#dialog').addEventListener('close',revert,{once:true});
  const row=el('div',undefined,'row');b.append(row);button(row,'保存这份心情',()=>{storeLocal('appearance',draft);committed=true;applyAppearance(draft);close();toast('颜色与阅读设置已保存在本设备');},'primary');button(row,'取消预览',close);button(row,'恢复默认',()=>{draft={...defaultAppearance};custom.value=draft.color;night.checked=draft.night;const selects=controls.querySelectorAll('select');selects[0].value=draft.font;selects[1].value=draft.size;selects[2].value=draft.spacing;refresh();});refresh();
 }
-function licensePanel(){const b=modal('高级功能 · 本地授权');
+function licensePanel(){const b=modal('高级功能 · 授权');
  const community=LICENSE_CHANNEL==='community';
  note(b,isPro()?(community?'已解锁 · 社区免费授权':'已解锁 · 站点授权'):'当前为免费基础版','notice');
  note(b,'全文与记忆搜索、保存与套用记忆模板需要有效授权。聊天、图片、语音、联网、阅读设置，以及查看、复制、删除、导出和加密备份始终免费。API 费用由服务方单独收取。');
  if(community){note(b,'这是自行部署版本。下载公开的社区免费授权文件，再在下方导入即可解锁；无需购买。该授权不适用于运营者提供的站点。');const a=el('a','下载社区免费授权');a.href='community.license';a.download='社区免费授权.license';b.append(a);}
  else note(b,'此站点只接受运营者签发的授权，不能使用公开的社区免费授权。请向站点运营者获取 license；本应用没有内置支付入口。');
- if(isPro())note(b,`授权编号：${licenseInfo.id}。适用：0.x 版本。${licenseInfo.expires===null?'无到期日':`有效期至 ${new Date(licenseInfo.expires).toLocaleDateString('zh-CN')}`}。离线验证，不上传设备或聊天数据。`);
+ if(LICENSE_VERIFY_URL)note(b,'此站点会发送授权文件进行在线校验。聊天记录、设备标识和 API Key 留在浏览器中，不随授权发送。');
+ if(licenseNotice)note(b,licenseNotice,'notice');
+ if(isPro())note(b,`授权编号：${licenseInfo.id}。适用：0.x 版本。${licenseInfo.expires===null?'无到期日':`有效期至 ${new Date(licenseInfo.expires).toLocaleDateString('zh-CN')}`}。`);
  const text=field(b,'粘贴授权文件内容（JSON）','textarea');text.placeholder='粘贴 .license 文件中的完整内容';text.maxLength=20000;
  const file=field(b,'或选择 .license 授权文件','file');file.accept='.license,.json';file.onchange=async()=>{try{const f=file.files[0];if(!f)return;if(f.size>20000)throw Error('授权文件过大');text.value=await f.text();}catch(e){toast(e.message);}};
- const row=el('div',undefined,'row');b.append(row);button(row,'验证并解锁',async()=>{let envelope;try{envelope=JSON.parse(text.value);}catch{throw Error('请粘贴完整的授权 JSON 或选择授权文件');}const verified=await verifyLicense(envelope,PUBLIC_KEY,{channel:LICENSE_CHANNEL});storeLocal('license',envelope);licenseInfo=verified;text.value='';close();render();toast('高级功能已解锁，无需上传聊天数据');},'primary');
- button(row,'移除本机授权',()=>{localStorage.removeItem('xuye-license');licenseInfo=null;fullSearch=false;close();render();toast('已切回免费基础版，记录和已保存模板保留');});
+ const row=el('div',undefined,'row');b.append(row);
+ const apply=button(row,'验证并解锁',async()=>{
+  let envelope;try{envelope=JSON.parse(text.value);}catch{throw Error('请粘贴完整的授权 JSON 或选择授权文件');}
+  const revision=++licenseRevision;
+  licenseSubmitting=true;
+  apply.disabled=true;
+  try{
+   const verified=await checkLicense(envelope);
+   if(revision!==licenseRevision)return;
+   storeLocal('license',envelope);licenseInfo=verified;licenseNotice='';
+   text.value='';if(b.contains(apply))close();render();toast('高级功能已解锁');
+  }finally{licenseSubmitting=false;apply.disabled=false;}
+ },'primary');
+ button(row,'移除本机授权',()=>{++licenseRevision;localStorage.removeItem('xuye-license');licenseInfo=null;licenseNotice='';fullSearch=false;close();render();toast('已切回免费基础版，记录和已保存模板保留');});
  note(b,'更新或切换站点后，会按当前站点的验签配置重新校验已保存的授权。授权不匹配时，仅关闭高级操作，已有聊天和模板仍保留。');
 }
 
@@ -196,6 +223,12 @@ $('#manageBtn').onclick=managePanel;$('#appearanceBtn').onclick=appearancePanel;
 window.addEventListener('beforeunload',e=>{if(busy){e.preventDefault();e.returnValue='';}});
 mediaUI=createMediaUI({$,el,button,field,note,modal,toast,getKey:()=>key,isBusy:()=>busy,apiError,loadLocal,storeLocal,save:async id=>{for(const c of chats)for(const m of [...c.messages,...(c.revisions||[]).flatMap(r=>r.messages)])for(const d of m.documents||[])if(d.id===id)d.deleted=true;await save();render();}});
 loadLicense();
+if(LICENSE_VERIFY_URL){
+ let nextCheck=Date.now()+15*60_000;
+ const refreshLicense=()=>{if(document.visibilityState==='visible'&&Date.now()>=nextCheck){nextCheck=Date.now()+15*60_000;void loadLicense();}};
+ setInterval(refreshLicense,60_000);
+ document.addEventListener('visibilitychange',refreshLicense);
+}
 initDB().catch(()=>{modal('本地存储不可用');note($('#dialogBody'),'无法打开浏览器本地数据库。请使用允许本地存储的普通浏览模式后刷新；不要在此状态下输入重要记录。','notice');for(const b of document.querySelectorAll('button'))if(b.id!=='closeDialog')b.disabled=true;});
 
 function openSidebar() { $('#sidebar').classList.add('open'); $('#sidebarBackdrop').hidden=false; $('#menu').setAttribute('aria-expanded','true'); $('#closeSidebar').focus(); requestAnimationFrame(updateTitleOverflow); }

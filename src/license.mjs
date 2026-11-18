@@ -18,3 +18,18 @@ export async function verifyLicense(envelope,publicKey,{now=Date.now(),channel='
   return p;
  }catch(e){if(e.message?.startsWith('授权'))throw e;throw Error('授权无效、内容被修改，或不适用于此站点。社区免费授权不能用于运营站点。');}
 }
+
+export async function verifySiteLicense(envelope,publicKey,{channel,verifyUrl='',request=fetch}={}){
+ const license=await verifyLicense(envelope,publicKey,{channel});
+ if(!verifyUrl||channel!=='official')return license;
+ let response,result;
+ try{
+  response=await request(verifyUrl,{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({format:envelope.format,payload:envelope.payload,signature:envelope.signature}),
+   credentials:'omit',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)});
+  if(response.ok)result=await response.json();
+ }catch{throw Error('暂时连不上授权服务，请稍后重试。');}
+ if(response.status===403)throw Error('这份授权已撤销或未登记，请联系站点运营者。');
+ if(!response.ok||result?.active!==true||result.id!==license.id)throw Error('暂时无法确认授权状态，请稍后重试。');
+ return license;
+}
