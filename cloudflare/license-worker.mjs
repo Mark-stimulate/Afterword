@@ -33,28 +33,67 @@ async function readJSON(request) {
   return JSON.parse(decoder.decode(bytes.subarray(0, size)));
 }
 
-async function authorizeAdmin(request, env) {
+function allowedEmail(email, env) {
+  return typeof email === 'string' && email.trim().toLowerCase() === env.ADMIN_EMAIL.trim().toLowerCase();
+}
+
+function matchesAudience(audience, env) {
+  return typeof audience === 'string' ? audience === env.ACCESS_AUD : Array.isArray(audience) && audience.includes(env.ACCESS_AUD);
+}
+
+function signedCandidate(jwt, env) {
   try {
-    const jwt = request.headers.get('Cf-Access-Jwt-Assertion') ?? '';
-    if (jwt.length > 8000) return false;
+    if (!jwt || jwt.length > 8000) return null;
     const parts = jwt.split('.');
-    if (parts.length !== 3) return false;
+    if (parts.length !== 3 || parts.some(part => !/^[\w-]+$/.test(part))) return null;
     const [header, claims] = parts.slice(0, 2).map(part => JSON.parse(decoder.decode(fromBase64Url(part))));
     const now = Date.now() / 1000;
     if (header.alg !== 'RS256' || typeof header.kid !== 'string' || claims.iss !== env.ACCESS_ISSUER ||
-        !Array.isArray(claims.aud) || !claims.aud.includes(env.ACCESS_AUD) ||
+        !matchesAudience(claims.aud, env) ||
         !Number.isFinite(claims.exp) || claims.exp <= now || (claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || claims.nbf > now)) ||
-        claims.email?.toLowerCase() !== env.ADMIN_EMAIL.toLowerCase()) return false;
-    const response = await fetch(`${env.ACCESS_ISSUER}/cdn-cgi/access/certs`, {redirect: 'error', signal: AbortSignal.timeout(4000)});
-    if (!response.ok) return false;
-    const {keys} = await response.json();
-    const jwk = keys.find(key => key.kid === header.kid && key.kty === 'RSA');
-    if (!jwk) return false;
-    const key = await crypto.subtle.importKey('jwk', jwk, {name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256'}, false, ['verify']);
-    return crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, fromBase64Url(parts[2]), encoder.encode(parts.slice(0, 2).join('.')));
+        !allowedEmail(claims.email, env)) return null;
+    return {parts, kid: header.kid};
   } catch {
+    return null;
+  }
+}
+
+async function authorizeAdmin(request, env, context) {
+  if (context?.access && matchesAudience(context.access.aud, env)) {
+    try {
+      const identity = await context.access.getIdentity();
+      if (allowedEmail(identity?.email, env)) return true;
+    } catch {
+      // Fall back to verifying the application JWT.
+    }
+  }
+  const header = request.headers.get('Cf-Access-Jwt-Assertion');
+  const cookies = (request.headers.get('Cookie') ?? '').split(';').map(part => part.trim());
+  const cookie = cookies.find(part => part.startsWith('CF_Authorization='))?.slice('CF_Authorization='.length);
+  const candidates = [...new Set([header, cookie])].map(token => signedCandidate(token, env)).filter(Boolean);
+  if (!candidates.length) {
+    if (header || cookie || context?.access) console.warn(JSON.stringify({event: 'admin_access_denied', reason: 'token_claims'}));
     return false;
   }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${env.ACCESS_ISSUER}/cdn-cgi/access/certs`, {redirect: 'error', signal: controller.signal});
+    if (!response.ok) throw new Error('certificates');
+    const {keys} = await response.json();
+    for (const {parts, kid} of candidates) {
+      const jwk = keys.find(key => key.kid === kid && key.kty === 'RSA');
+      if (!jwk) continue;
+      const key = await crypto.subtle.importKey('jwk', jwk, {name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256'}, false, ['verify']);
+      if (await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, fromBase64Url(parts[2]), encoder.encode(parts.slice(0, 2).join('.')))) return true;
+    }
+    console.warn(JSON.stringify({event: 'admin_access_denied', reason: 'signature'}));
+  } catch {
+    console.warn(JSON.stringify({event: 'admin_access_denied', reason: 'certificates'}));
+  } finally {
+    clearTimeout(timeout);
+  }
+  return false;
 }
 
 async function issue(env) {
@@ -120,10 +159,16 @@ issue.onclick=async()=>{issue.disabled=true;try{
 }catch(e){notice.textContent=e.message;}finally{issue.disabled=false;}};
 refresh().catch(e=>{notice.textContent=e.message;});`;
 
-async function admin(request, env, url) {
-  if (!await authorizeAdmin(request, env)) return error(401, 'admin_required');
+async function admin(request, env, url, context) {
+  const isAdminPage = request.method === 'GET' && (url.pathname === '/admin' || url.pathname === '/admin/');
+  if (!await authorizeAdmin(request, env, context)) {
+    if (!isAdminPage) return error(401, 'admin_required');
+    return new Response('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>拾语 · 授权管理</title><main style="max-width:34rem;margin:12vh auto;padding:1rem;font:16px/1.7 system-ui"><h1>管理员登录未通过</h1><p>请使用配置的管理员邮箱重新登录 Cloudflare Access。</p><a href="/cdn-cgi/access/logout">退出当前登录</a></main></html>', {
+      status: 401, headers: {...securityHeaders, 'Content-Type': 'text/html; charset=utf-8'},
+    });
+  }
   if (request.method === 'GET') {
-    if (url.pathname === '/admin' || url.pathname === '/admin/') return new Response(adminPage, {headers: {...securityHeaders, 'Content-Type': 'text/html; charset=utf-8'}});
+    if (isAdminPage) return new Response(adminPage, {headers: {...securityHeaders, 'Content-Type': 'text/html; charset=utf-8'}});
     if (url.pathname === '/admin/ui.js') return new Response(adminScript, {headers: {...securityHeaders, 'Content-Type': 'text/javascript; charset=utf-8'}});
     if (url.pathname === '/admin/licenses') {
       const rows = await env.LICENSE_DB.prepare('SELECT id, issued_at, revoked_at FROM licenses ORDER BY issued_at DESC LIMIT 100').all();
@@ -145,7 +190,7 @@ async function admin(request, env, url) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     const url = new URL(request.url);
     if (url.hostname !== env.LICENSE_HOST) return error(404, 'not_found');
     const cors = url.pathname === '/verify' && request.headers.get('Origin') === env.APP_ORIGIN
@@ -159,7 +204,7 @@ export default {
         if (request.method === 'OPTIONS' && cors.Vary) return new Response(null, {status: 204, headers: {...securityHeaders, ...cors, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type'}});
         if (request.method === 'POST') return await check(request, env, cors);
       }
-      if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) return await admin(request, env, url);
+      if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) return await admin(request, env, url, context);
       return error(404, 'not_found', cors);
     } catch {
       console.error(JSON.stringify({event: 'license_request_failed', endpoint: url.pathname.startsWith('/admin') ? 'admin' : url.pathname === '/verify' ? 'verify' : 'health'}));
